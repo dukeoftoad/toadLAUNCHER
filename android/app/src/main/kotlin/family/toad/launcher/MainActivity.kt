@@ -319,12 +319,13 @@ class MainActivity : FlutterActivity() {
     private fun toadWidgets(familyIds: List<String>): List<Map<String, Any?>> {
         val awm = AppWidgetManager.getInstance(this)
         return awm.installedProviders
-            .filter { it.packageName in familyIds }
+            .filter { it.provider.packageName in familyIds }
             .map {
+                val cn = it.provider
                 mapOf(
-                    "providerId" to ComponentName(it.packageName, it.name).flattenToString(),
-                    "label" to (it.loadLabel(packageManager)?.toString() ?: it.packageName),
-                    "packageName" to it.packageName,
+                    "providerId" to cn.flattenToString(),
+                    "label" to (it.loadLabel(packageManager)?.toString() ?: cn.packageName),
+                    "packageName" to cn.packageName,
                 )
             }
     }
