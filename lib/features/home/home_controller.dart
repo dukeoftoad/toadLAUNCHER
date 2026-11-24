@@ -1,15 +1,23 @@
 /// Home screen state — loads the app index, tracks the visible page and
 /// applies layout mutations (recents, remove, folder rename) plus the
-/// stage-3 widget engine (place / resize / move / undo).
+/// stage-3 widget engine (place / resize / move / undo) and the v0.11
+/// real-widget engine (AppWidgetHost placements that survive restarts).
 library;
+
+import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/models/models.dart';
+import '../../core/device/device_bridge.dart';
 import '../../core/repositories/app_repository.dart';
 import '../../core/repositories/device_app_repository.dart';
 import '../../core/settings/launcher_settings.dart';
+
+const String _kHostedWidgetsKey = 'toadlauncher.hosted.widgets.v1';
 
 /// Async home layout from the repository (demo-seeded for this alpha).
 final AsyncNotifierProvider<HomeController, HomeLayout> homeLayoutProvider =
@@ -67,8 +75,19 @@ class HomeController extends AsyncNotifier<HomeLayout> {
         ),
       );
     }
-    if (seeded.isEmpty) return layout;
-    return layout.copyWith(widgets: [...seeded, ...layout.widgets]);
+
+    // Real Android widgets (AppWidgetHost ids survive restarts — the OS
+    // keeps the binding as long as we never delete the id).
+    final hosted = await _restoreHosted();
+
+    if (seeded.isEmpty) {
+      return layout.copyWith(widgets: [...hosted, ...layout.widgets]);
+    }
+    return layout.copyWith(widgets: [
+      ...seeded,
+      ...hosted,
+      ...layout.widgets,
+    ]);
   }
 
   /// Launch through the repository, then feed the drawer recents row.
@@ -184,6 +203,7 @@ class HomeController extends AsyncNotifier<HomeLayout> {
         WidgetKind.memories => 4,
         WidgetKind.calendar => 4,
         WidgetKind.sticky => 2,
+        WidgetKind.androidHosted => 4,
       };
 
   static int _defaultH(WidgetKind kind, LauncherSettings settings) =>
@@ -192,6 +212,7 @@ class HomeController extends AsyncNotifier<HomeLayout> {
         WidgetKind.memories => 2,
         WidgetKind.calendar => 4,
         WidgetKind.sticky => 2,
+        WidgetKind.androidHosted => 2,
       };
 
   /// Capture the pre-action state. Call once at the start of a gesture;
@@ -251,12 +272,16 @@ class HomeController extends AsyncNotifier<HomeLayout> {
 
   bool get canUndo => _undoStack.isNotEmpty;
 
-  /// Place a widget from the picker. One of each kind — the picker already
-  /// explains that honestly, this is the guard.
+  /// Place a widget from the picker. One of each local kind — the picker
+  /// already explains that honestly, this is the guard. Hosted widgets
+  /// are not limited: a home can carry as many real widgets as fit.
   bool placeWidget(WidgetKind kind, {required int page, int? index}) {
     final current = state.value;
     if (current == null) return false;
-    if (current.widgets.any((w) => w.kind == kind)) return false;
+    if (kind != WidgetKind.androidHosted &&
+        current.widgets.any((w) => w.kind == kind)) {
+      return false;
+    }
 
     final settings = ref.read(launcherSettingsProvider);
     final snap = snapshot();
@@ -280,16 +305,67 @@ class HomeController extends AsyncNotifier<HomeLayout> {
   }
 
   /// Remove a placed widget (edit mode long-press menu / picker swap).
+  /// Hosted Android widgets also release their AppWidgetHost id.
   void removeWidget(String id, {String? message}) {
     final current = state.value;
     if (current == null) return;
+    final victim = current.widgets.where((w) => w.id == id).firstOrNull;
+    if (victim == null) return;
     final snap = snapshot();
     state = AsyncData(
       current.copyWith(
         widgets: current.widgets.where((w) => w.id != id).toList(),
       ),
     );
+    if (victim.kind == WidgetKind.androidHosted) {
+      _forgetHosted(victim);
+      final appWidgetId = victim.appWidgetId;
+      if (appWidgetId != null) {
+        ref.read(deviceBridgeProvider).deleteHostedWidget(appWidgetId);
+      }
+    }
     commitAction(snap, message: message ?? 'Widget removed');
+  }
+
+  // -----------------------------------------------------------------------
+  // v0.11 — real Android widgets (AppWidgetHost)
+  // -----------------------------------------------------------------------
+
+  /// Place a freshly bound real widget at the top of [page]'s stack.
+  bool placeHostedWidget({
+    required int page,
+    int? index,
+    required String providerId,
+    required String label,
+    required String packageName,
+    required int appWidgetId,
+  }) {
+    final current = state.value;
+    if (current == null) return false;
+    final snap = snapshot();
+    final widget = PlacedWidget(
+      id: 'hosted-$appWidgetId',
+      kind: WidgetKind.androidHosted,
+      page: page,
+      w: 4,
+      h: 2,
+      providerId: providerId,
+      appWidgetId: appWidgetId,
+      label: label,
+      packageName: packageName,
+    );
+    final pageWidgets = [...current.widgets.where((w) => w.page == page)];
+    final others = current.widgets.where((w) => w.page != page).toList();
+    final insertAt = (index == null || index > pageWidgets.length)
+        ? pageWidgets.length
+        : index.clamp(0, pageWidgets.length);
+    pageWidgets.insert(insertAt, widget);
+
+    final next = current.copyWith(widgets: [...pageWidgets, ...others]);
+    state = AsyncData(next);
+    _persistHosted(next);
+    commitAction(snap);
+    return true;
   }
 
   /// Live resize — the clock re-renders at every size (screen 7). Spans
@@ -348,7 +424,71 @@ class HomeController extends AsyncNotifier<HomeLayout> {
         rebuilt.add(pageWidgets.removeAt(0));
       }
     }
-    state = AsyncData(current.copyWith(widgets: rebuilt));
+    final next = current.copyWith(widgets: rebuilt);
+    state = AsyncData(next);
+    _persistHosted(next);
+  }
+
+  // -- hosted persistence ---------------------------------------------------
+
+  Map<String, Object?> _hostedToJson(PlacedWidget w) => {
+    'id': w.id,
+    'providerId': w.providerId,
+    'appWidgetId': w.appWidgetId,
+    'label': w.label,
+    'packageName': w.packageName,
+    'page': w.page,
+    'w': w.w,
+    'h': w.h,
+  };
+
+  Future<void> _persistHosted(HomeLayout layout) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final hosted = layout.widgets
+          .where((w) => w.kind == WidgetKind.androidHosted)
+          .map(_hostedToJson)
+          .toList();
+      await prefs.setString(_kHostedWidgetsKey, jsonEncode(hosted));
+    } catch (_) {
+      // Best-effort; the OS keeps the binding either way.
+    }
+  }
+
+  Future<List<PlacedWidget>> _restoreHosted() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_kHostedWidgetsKey);
+      if (raw == null || raw.isEmpty) return const [];
+      final list = (jsonDecode(raw) as List<dynamic>).cast<Map<dynamic, dynamic>>();
+      return [
+        for (final item in list)
+          if (item['appWidgetId'] != null && item['providerId'] != null)
+            PlacedWidget(
+              id: item['id'] as String? ?? 'hosted-${item['appWidgetId']}',
+              kind: WidgetKind.androidHosted,
+              page: (item['page'] as num?)?.toInt() ?? 0,
+              w: ((item['w'] as num?)?.toInt() ?? 4).clamp(2, 4),
+              h: ((item['h'] as num?)?.toInt() ?? 2).clamp(1, 4),
+              providerId: item['providerId'] as String?,
+              appWidgetId: (item['appWidgetId'] as num?)?.toInt(),
+              label: item['label'] as String?,
+              packageName: item['packageName'] as String?,
+            ),
+      ];
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<void> _forgetHosted(PlacedWidget victim) async {
+    final current = state.value;
+    if (current == null) return;
+    await _persistHosted(
+      current.copyWith(
+        widgets: current.widgets.where((w) => w.id != victim.id).toList(),
+      ),
+    );
   }
 }
 

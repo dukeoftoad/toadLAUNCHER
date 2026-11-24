@@ -129,6 +129,38 @@ class ToadWidgetInfo {
   final String packageName;
 }
 
+/// One home-screen widget provider on the phone — the picker's shelf.
+@immutable
+class HostableWidgetInfo {
+  const HostableWidgetInfo({
+    required this.providerId,
+    required this.label,
+    required this.packageName,
+    this.previewPng,
+    this.minWidthPx = 0,
+    this.minHeightPx = 0,
+  });
+
+  final String providerId;
+  final String label;
+  final String packageName;
+
+  /// Provider preview rendered to PNG by the channel (null → the picker
+  /// falls back to the app icon).
+  final Uint8List? previewPng;
+  final int minWidthPx;
+  final int minHeightPx;
+}
+
+/// One app shortcut as Android reports it (default-home only).
+@immutable
+class ToadShortcutInfo {
+  const ToadShortcutInfo({required this.id, required this.label});
+
+  final String id;
+  final String label;
+}
+
 /// Outcome of handing an APK to the system installer (toadFILES pattern).
 enum InstallHandoff {
   /// The package installer was launched.
@@ -182,6 +214,11 @@ class DeviceBridge {
   static const String channelName = 'family.toad.launcher/device';
 
   bool get _wired => _channel != null;
+
+  /// True when this bridge carries a real platform channel — i.e. we are
+  /// plausibly on an Android device. The honest-device banner keys off
+  /// this: "Android is not answering" only makes sense on Android.
+  bool get wired => _wired;
 
   Future<Object?> _invoke(String method, [Map<String, Object?>? args]) async {
     if (!_wired) throw MissingPluginException();
@@ -241,6 +278,236 @@ class DeviceBridge {
     } catch (_) {
       return false;
     }
+  }
+
+  // -- launcher-grade system integrations ---------------------------------
+
+  /// True when this launcher currently holds the HOME role.
+  Future<bool> isDefaultHome() async {
+    try {
+      return await _invoke('isDefaultHome') == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Opens the system role dialog (API 29+) / home settings (26–28).
+  Future<bool> requestDefaultHome() async {
+    try {
+      return await _invoke('requestDefaultHome') == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Pulls the real notification shade down. False when the hidden
+  /// status-bar API is unavailable on this ROM — the UI then says so.
+  Future<bool> openNotifications() async {
+    try {
+      return await _invoke('openNotifications') == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Lock via the accessibility service; false when it is not enabled —
+  /// callers deep-link to the exact settings page and explain.
+  Future<bool> lockScreen() async {
+    try {
+      return await _invoke('lockScreen') == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> isLockServiceEnabled() async {
+    try {
+      return await _invoke('isLockServiceEnabled') == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> openAccessibilitySettings() async {
+    try {
+      return await _invoke('openAccessibilitySettings') == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> hasNotificationAccess() async {
+    try {
+      return await _invoke('hasNotificationAccess') == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> openNotificationListenerSettings() async {
+    try {
+      return await _invoke('openNotificationListenerSettings') == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// App shortcuts for long-press menus (empty when not default home —
+  /// Android only lets the home app query them).
+  Future<List<ToadShortcutInfo>> appShortcuts(String packageId) async {
+    try {
+      final raw =
+          (await _invoke('appShortcuts', {
+            'packageId': packageId,
+          })) as List<Object?>?;
+      if (raw == null) return const [];
+      return [
+        for (final item in raw)
+          if (item is Map)
+            ToadShortcutInfo(
+              id: item['id'] as String? ?? '',
+              label: item['label'] as String? ?? '',
+            ),
+      ];
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<bool> startShortcut(String packageId, String shortcutId) async {
+    try {
+      return await _invoke('startShortcut', {
+        'packageId': packageId,
+        'shortcutId': shortcutId,
+      }) == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Real share sheet for an app (chooser with its name).
+  Future<bool> shareApp(String packageId) async {
+    try {
+      return await _invoke('shareApp', {'packageId': packageId}) == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // -- real widget hosting --------------------------------------------------
+
+  /// Every widget provider on the phone (preview PNGs included).
+  Future<List<HostableWidgetInfo>> listHostableWidgets() async {
+    try {
+      final raw = (await _invoke('listHostableWidgets')) as List<Object?>?;
+      if (raw == null) return const [];
+      return [
+        for (final item in raw)
+          if (item is Map)
+            HostableWidgetInfo(
+              providerId: item['providerId'] as String? ?? '',
+              label: item['label'] as String? ?? '',
+              packageName: item['packageName'] as String? ?? '',
+              previewPng: item['previewPng'] as Uint8List?,
+              minWidthPx: (item['minWidth'] as num?)?.toInt() ?? 0,
+              minHeightPx: (item['minHeight'] as num?)?.toInt() ?? 0,
+            ),
+      ];
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// Allocate + bind. Returns the appWidgetId, or null when refused —
+  /// refusal means "not the default home"; the UI explains that.
+  Future<int?> hostWidget(String providerId) async {
+    try {
+      return (await _invoke('hostWidget', {
+        'providerId': providerId,
+      })) as int?;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Release the id when a hosted widget leaves the home screen.
+  Future<bool> deleteHostedWidget(int appWidgetId) async {
+    try {
+      return await _invoke('deleteHostedWidget', {
+        'appWidgetId': appWidgetId,
+      }) == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // -- OS → Dart events -----------------------------------------------------
+
+  final List<void Function(String packageId, String action)>
+  _packagesChangedListeners = [];
+
+  final List<void Function(Map<String, int> counts)>
+  _notificationCountListeners = [];
+
+  bool _eventHandlerInstalled = false;
+
+  void _installEventHandler() {
+    if (_eventHandlerInstalled || !_wired) return;
+    _eventHandlerInstalled = true;
+    _channel!.setMethodCallHandler((call) async {
+      switch (call.method) {
+        case 'packagesChanged':
+          final args = call.arguments;
+          final packageId = args is Map
+              ? args['packageId'] as String? ?? ''
+              : '';
+          final action = args is Map ? args['action'] as String? ?? '' : '';
+          for (final listener in _packagesChangedListeners.toList()) {
+            listener(packageId, action);
+          }
+        case 'notificationCounts':
+          final raw = call.arguments;
+          final counts = <String, int>{};
+          if (raw is Map) {
+            for (final entry in raw.entries) {
+              counts[entry.key as String? ?? ''] =
+                  (entry.value as num?)?.toInt() ?? 0;
+            }
+          }
+          for (final listener in _notificationCountListeners.toList()) {
+            listener(counts);
+          }
+      }
+      return null;
+    });
+  }
+
+  /// The index refresh trigger — fires on install / update / remove.
+  void addPackagesChangedListener(
+    void Function(String packageId, String action) listener,
+  ) {
+    _installEventHandler();
+    _packagesChangedListeners.add(listener);
+  }
+
+  void removePackagesChangedListener(
+    void Function(String packageId, String action) listener,
+  ) {
+    _packagesChangedListeners.remove(listener);
+  }
+
+  /// Live notification counts per package (dots on icons).
+  void addNotificationCountsListener(
+    void Function(Map<String, int> counts) listener,
+  ) {
+    _installEventHandler();
+    _notificationCountListeners.add(listener);
+  }
+
+  void removeNotificationCountsListener(
+    void Function(Map<String, int> counts) listener,
+  ) {
+    _notificationCountListeners.remove(listener);
   }
 
   /// Package ids sorted by last use (newest first). Returns null when the
@@ -415,5 +682,30 @@ class DeviceBridge {
 
 /// The bridge as a provider — overridable in tests.
 final Provider<DeviceBridge> deviceBridgeProvider = Provider<DeviceBridge>(
-  (ref) => DeviceBridge(),
+  (ref) {
+    // The real channel ONLY on Android — tests, web and desktop keep the
+    // channel-free bridge that answers honestly. (v0.10 shipped this
+    // provider with a permanently null channel: device mode could never
+    // engage. The review caught it; fixed here.)
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      return DeviceBridge(const MethodChannel(DeviceBridge.channelName));
+    }
+    return DeviceBridge();
+  },
 );
+
+/// Does this launcher currently hold the HOME role? (Probed on demand;
+/// refreshed by the home screen on resume and after the role dialog.)
+final FutureProvider<bool> isDefaultHomeProvider = FutureProvider<bool>(
+  (ref) => ref.watch(deviceBridgeProvider).isDefaultHome(),
+);
+
+/// Is Notification access granted (the dots service needs it)? Probed on
+/// demand; the settings page refreshes when the user returns.
+final FutureProvider<bool> notificationAccessProvider = FutureProvider<bool>(
+  (ref) => ref.watch(deviceBridgeProvider).hasNotificationAccess(),
+);
+
+/// Live notification counts per package, pushed by the listener service.
+final StateProvider<Map<String, int>> notificationCountsProvider =
+    StateProvider<Map<String, int>>((ref) => const {});

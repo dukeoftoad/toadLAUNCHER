@@ -12,6 +12,7 @@ import 'package:flutter/services.dart' show SystemUiOverlayStyle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../../core/device/device_bridge.dart';
 import '../../core/models/models.dart';
 import '../../core/repositories/app_repository.dart';
 import '../../core/repositories/device_app_repository.dart';
@@ -209,6 +210,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     AppEntry? app,
     FolderData? folder,
     String? folderId,
+    List<MenuShortcut> shortcuts = const [],
   }) {
     final size = MediaQuery.sizeOf(context);
     final effectiveAnchor =
@@ -224,7 +226,51 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           app: app,
           folder: folder,
           folderId: folderId,
+          shortcuts: shortcuts,
         ),
+      );
+    });
+  }
+
+  /// App menus first ask Android for the app's real shortcuts
+  /// (LauncherApps; empty unless we are the default Home), then raise
+  /// the popover with everything wired.
+  void _showAppMenu(
+    MenuContext variant, {
+    Offset? anchor,
+    AppEntry? app,
+    FolderData? folder,
+    String? folderId,
+  }) {
+    final repo = ref.read(appRepositoryProvider);
+    if (repo is! DeviceAppRepository || app == null) {
+      _showMenu(variant, anchor: anchor, app: app, folder: folder,
+          folderId: folderId);
+      return;
+    }
+    final packageId = app.packageName ?? app.id;
+    ref
+        .read(deviceBridgeProvider)
+        .appShortcuts(packageId)
+        .then((list) {
+      if (!mounted) return;
+      final shortcuts = [
+        for (final s in list)
+          MenuShortcut(
+            label: s.label,
+            onPick: () {
+              _dismissMenu();
+              ref.read(deviceBridgeProvider).startShortcut(packageId, s.id);
+            },
+          ),
+      ];
+      _showMenu(
+        variant,
+        anchor: anchor,
+        app: app,
+        folder: folder,
+        folderId: folderId,
+        shortcuts: shortcuts,
       );
     });
   }
@@ -234,6 +280,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     AppEntry? app,
     FolderData? folder,
     String? folderId,
+    List<MenuShortcut> shortcuts = const [],
   }) {
     final notifier = ref.read(homeLayoutProvider.notifier);
     final repo = ref.read(appRepositoryProvider);
@@ -253,6 +300,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
 
     return MenuActions(
+      shortcuts: shortcuts,
       onAppInfo: () {
         _dismissMenu();
         if (device && app != null) {
@@ -264,7 +312,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       onWidgets: _openWidgets,
       onShare: () {
         _dismissMenu();
-        _toast('Share is a device feature — demo stays offline');
+        if (device && app != null) {
+          ref.read(deviceBridgeProvider).shareApp(app.packageName ?? app.id);
+        } else {
+          _toast('Share is a device feature — demo stays offline');
+        }
       },
       onUninstall: () {
         _dismissMenu();
@@ -334,23 +386,53 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       // Swipe up → drawer.
       if (settings.swipeUpDrawer) _openDrawer();
     } else if (v.dy > 320) {
-      // Swipe down → pull the notification shade (demo stays honest).
+      // Swipe down → pull the REAL notification shade. When the hidden
+      // status-bar API is unavailable the toast stays honest.
       if (settings.swipeDownNotifications) {
-        _toast(
-          'The notification shade is a system surface — the demo '
-          'stays inside',
-        );
+        _pullNotificationShade();
       }
     }
   }
 
-  /// Opt-in double-tap sleep — honest in demo: no write-settings here.
+  Future<void> _pullNotificationShade() async {
+    final repo = ref.read(appRepositoryProvider);
+    if (repo is DeviceAppRepository) {
+      final pulled = await ref.read(deviceBridgeProvider).openNotifications();
+      if (!pulled) {
+        _toast(
+          'This ROM blocked the shade call — swipe from the status bar '
+          'top edge',
+        );
+      }
+    } else {
+      _toast(
+        'The notification shade is a system surface — the demo '
+        'stays inside',
+      );
+    }
+  }
+
+  /// Double-tap sleep — real on device through the accessibility lock
+  /// service; the service-missing path deep-links to the exact toggle.
   void _onDoubleTap() {
     if (_overlayBusy) return;
     final settings = ref.read(launcherSettingsProvider);
-    if (settings.doubleTapSleep) {
+    if (!settings.doubleTapSleep) return;
+
+    final repo = ref.read(appRepositoryProvider);
+    if (repo is DeviceAppRepository) {
+      ref.read(deviceBridgeProvider).lockScreen().then((locked) {
+        if (!locked && mounted) {
+          _toast(
+            'Screen lock needs the toad lock service — opening '
+            'Accessibility, flip it on',
+          );
+          ref.read(deviceBridgeProvider).openAccessibilitySettings();
+        }
+      });
+    } else {
       _toast(
-        'Double-tap sleep needs the write-settings permission — '
+        'Double-tap sleep needs a real device — '
         'the demo keeps the paper lit',
       );
     }
@@ -579,7 +661,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                               iconShape: settings.iconShape,
                                               onAppTap: _launch,
                                               onAppLongPress: (app, anchor) =>
-                                                  _showMenu(
+                                                  _showAppMenu(
                                                     MenuContext.homeApp,
                                                     anchor: anchor,
                                                     app: app,
@@ -641,7 +723,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                             box.size.width / 2,
                                             box.size.height - 42,
                                           );
-                                          _showMenu(
+                                          _showAppMenu(
                                             MenuContext.dockApp,
                                             anchor: dockCenter,
                                             app: app,
@@ -673,6 +755,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               // ---- Drawer (screen 4) ----
               if (drawerOpen) AppDrawer(startWithSearch: _drawerWithSearch),
 
+              // ---- Device status banner (v0.11: honest defaults) ----
+              const DeviceStatusBanner(),
+
               // ---- Pick-to-place ghost (screen 8) ----
               const PlacementGhost(),
 
@@ -687,6 +772,171 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Session-only dismissals for the honest-device banners.
+final StateProvider<Set<String>> deviceBannerDismissedProvider =
+    StateProvider<Set<String>>((ref) => const {});
+
+/// Two calm, honest, dismissable banners over home (v0.11):
+///
+///  1. device mode on but Android not answering — says WHY demo apps are
+///     showing (v0.10 fell back silently, which read as "broken") and
+///     offers a retry.
+///  2. Android answering but toadLAUNCHER is not the Home app — the
+///     launcher experience (real widgets, shortcuts, pinned widgets)
+///     needs the HOME role; one tap opens the system role dialog.
+class DeviceStatusBanner extends ConsumerWidget {
+  const DeviceStatusBanner({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(launcherSettingsProvider);
+    final reachable = ref.watch(deviceCapabilityProvider).value ?? false;
+    final isHome = ref.watch(isDefaultHomeProvider).value ?? true;
+    final dismissed = ref.watch(deviceBannerDismissedProvider);
+    final wired = ref.watch(deviceBridgeProvider).wired;
+
+    String? message;
+    String actionLabel = '';
+    void Function()? onAction;
+
+    if (settings.deviceMode &&
+        wired &&
+        !reachable &&
+        !dismissed.contains('bridge')) {
+      message =
+          'Android is not answering — the demo pond is showing. '
+          'Demo apps here are not real.';
+      actionLabel = 'retry';
+      onAction = () {
+        ref.invalidate(deviceCapabilityProvider);
+        ref.invalidate(isDefaultHomeProvider);
+        ref.invalidate(homeLayoutProvider);
+      };
+    } else if (settings.deviceMode &&
+        reachable &&
+        !isHome &&
+        !dismissed.contains('home')) {
+      message =
+          'toadLAUNCHER is not your Home yet — real widgets and app '
+          'shortcuts need it';
+      actionLabel = 'make Home';
+      onAction = () async {
+        await ref.read(deviceBridgeProvider).requestDefaultHome();
+        ref.invalidate(isDefaultHomeProvider);
+      };
+    }
+    if (message == null) return const SizedBox.shrink();
+
+    final skin = ToadTheme.of(context);
+    final palette = skin.palette;
+    final dark = skin.isDark;
+    final ink = dark ? const Color(0xFFE8E2D4) : palette.ink;
+
+    // Launcher contract: a banner looks, but never eats home gestures.
+    // The paper paints through IgnorePointer; only the pill and ✕ take
+    // pointers (they sit in a Row above the passthrough paper).
+    return Positioned(
+      left: 14,
+      right: 14,
+      top: 14,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: palette.surface,
+                  borderRadius: BorderRadius.circular(ToadRadii.card),
+                  border: Border.all(color: palette.hairline),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x33000000),
+                      offset: Offset(0, 6),
+                      blurRadius: 16,
+                      spreadRadius: -6,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Row(
+            children: [
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
+                  // Plain Text absorbs hits in modern Flutter — the
+                  // banner message must never steal home gestures.
+                  child: IgnorePointer(
+                    child: Text(
+                      message,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: ToadType.hand(13.5, color: ink),
+                    ),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(0, 10, 14, 10),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: onAction,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: palette.accentWash,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          actionLabel,
+                          style: ToadType.hand(13, color: palette.accentInk),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () {
+                        final key = reachable ? 'home' : 'bridge';
+                        ref
+                            .read(deviceBannerDismissedProvider.notifier)
+                            .state = {
+                          ...ref.read(deviceBannerDismissedProvider),
+                          key,
+                        };
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 6,
+                        ),
+                        child: Text(
+                          '✕',
+                          style: ToadType.hand(
+                            14,
+                            color: ink.withValues(alpha: ink.a * 0.5),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

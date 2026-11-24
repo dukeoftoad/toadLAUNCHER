@@ -58,6 +58,33 @@
             </intent-filter>
         </activity>
 
+        <!-- Screen lock for double-tap-to-sleep (user opt-in in
+             Accessibility settings; performs the lock action only). -->
+        <service
+            android:name=".ToadLockService"
+            android:exported="false"
+            android:label="toadLAUNCHER screen lock"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/toad_lock_service"/>
+        </service>
+
+        <!-- Notification dots (user opt-in via Notification access).
+             Counts only: package + ongoing flag, never message content. -->
+        <service
+            android:name=".ToadNotificationListener"
+            android:exported="false"
+            android:label="@string/toad_notifications_label"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService"/>
+            </intent-filter>
+        </service>
+
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

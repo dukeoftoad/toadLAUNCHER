@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  toadLAUNCHER lock service — double-tap-to-sleep.
+  Performs GLOBAL_ACTION_LOCK_SCREEN only. It retrieves no window
+  content and reacts to no accessibility events: the smallest possible
+  footprint Android allows for the screen-lock action.
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault"
+    android:canRetrieveWindowContent="false"
+    android:description="@string/toad_lock_service_description"
+    android:notificationTimeout="100" />

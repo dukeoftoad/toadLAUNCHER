@@ -395,8 +395,8 @@ class NotificationsSettingsPage extends ConsumerWidget {
             _SwitchRow(
               title: 'Notification dots',
               subtitle:
-                  'Dots on icons when something waits — live notifications '
-                  'arrive with device mode',
+                  'Dots on icons when something waits — real counts live '
+                  'with Notification access',
               value: settings.notificationDots,
               accent: palette.accent,
               ink: ink,
@@ -410,9 +410,85 @@ class NotificationsSettingsPage extends ConsumerWidget {
               ink: ink,
               onChanged: notifier.setBadges,
             ),
+            const _NotificationAccessRow(),
           ],
         ),
       ],
+    );
+  }
+}
+
+/// Notification access — the one special access the dots service needs.
+/// The counts service reads package names only, never message content.
+class _NotificationAccessRow extends ConsumerWidget {
+  const _NotificationAccessRow();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final skin = ToadTheme.of(context);
+    final palette = skin.palette;
+    final dark = skin.isDark;
+    final ink = dark ? const Color(0xFFE8E2D4) : palette.ink;
+    final reachable = ref.watch(deviceCapabilityProvider).value ?? false;
+    final hasAccess = ref.watch(notificationAccessProvider).value ?? false;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Notification access', style: ToadType.hand(15, color: ink)),
+                const SizedBox(height: 2),
+                Text(
+                  !reachable
+                      ? 'Unknown while Android is not answering'
+                      : hasAccess
+                          ? 'Granted — dots show live counts; the service '
+                              'reads package names only'
+                          : 'Not granted — dots stay quiet until you flip '
+                              'the exact toggle',
+                  style: ToadType.inter(
+                    10.5,
+                    height: 1.3,
+                    color: ink.withValues(alpha: ink.a * 0.55),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (reachable && !hasAccess)
+            const SizedBox(width: 10)
+          else
+            const SizedBox.shrink(),
+          if (reachable && !hasAccess)
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () async {
+                await ref
+                    .read(deviceBridgeProvider)
+                    .openNotificationListenerSettings();
+                ref.invalidate(notificationAccessProvider);
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 7,
+                ),
+                decoration: BoxDecoration(
+                  color: palette.accentWash,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  'open settings',
+                  style: ToadType.hand(13, color: palette.accentInk),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
@@ -500,7 +576,7 @@ class AboutPage extends ConsumerWidget {
               Text('toadLAUNCHER', style: ToadType.caveat(34, color: ink)),
               const SizedBox(height: 6),
               Text(
-                'v0.10.0-beta · device mode + the whole family',
+                'v0.11.0-beta · real widgets, real gestures, real dots',
                 style: ToadType.inter(
                   11,
                   color: ink.withValues(alpha: ink.a * 0.6),
@@ -573,6 +649,7 @@ class DeviceUpdatesSettingsPage extends ConsumerWidget {
                   ? (v) => notifier.setDeviceMode(v)
                   : null,
             ),
+            const _DefaultHomeRow(),
             _SwitchRow(
               title: 'Usage-based recents',
               subtitle:
@@ -626,6 +703,81 @@ class DeviceUpdatesSettingsPage extends ConsumerWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// The HOME-role row — P0 of the launcher checklist: the user must be
+/// able to SEE whether toadLAUNCHER is the actual home app and fix it in
+/// one tap (the system role dialog).
+class _DefaultHomeRow extends ConsumerWidget {
+  const _DefaultHomeRow();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final skin = ToadTheme.of(context);
+    final palette = skin.palette;
+    final dark = skin.isDark;
+    final ink = dark ? const Color(0xFFE8E2D4) : palette.ink;
+    final reachable = ref.watch(deviceCapabilityProvider).value ?? false;
+    final isHome = ref.watch(isDefaultHomeProvider).value ?? true;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Default home screen', style: ToadType.hand(15, color: ink)),
+                const SizedBox(height: 2),
+                Text(
+                  !reachable
+                      ? 'Unknown while Android is not answering'
+                      : isHome
+                          ? 'toadLAUNCHER is your Home — widgets, shortcuts '
+                              'and shade are unlocked'
+                          : 'Another app is Home — real widgets, app '
+                              'shortcuts and pinned widgets need the HOME '
+                              'role',
+                  style: ToadType.inter(
+                    10.5,
+                    height: 1.3,
+                    color: ink.withValues(alpha: ink.a * 0.55),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (reachable && !isHome)
+            const SizedBox(width: 10)
+          else
+            const SizedBox.shrink(),
+          if (reachable && !isHome)
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () async {
+                await ref.read(deviceBridgeProvider).requestDefaultHome();
+                ref.invalidate(isDefaultHomeProvider);
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 7,
+                ),
+                decoration: BoxDecoration(
+                  color: palette.accentWash,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  'make Home',
+                  style: ToadType.hand(13, color: palette.accentInk),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

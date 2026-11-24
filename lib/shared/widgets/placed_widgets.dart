@@ -17,6 +17,7 @@ import '../../core/settings/launcher_settings.dart' show clockProvider;
 import '../../core/theme/toad_theme.dart';
 import '../../core/theme/toad_tokens.dart';
 import '../../features/home/widgets/hero_zone.dart' show buildHeroData;
+import 'android_widget_view.dart';
 
 /// Span → clock scale. 4×1 (the default hero) renders exactly 1.0 — the
 /// stage-1 look; dragging a corner re-renders live at every size.
@@ -45,6 +46,8 @@ class PlacedWidgetView extends ConsumerWidget {
         return CalendarWidgetView(now: now, h: widget.h);
       case WidgetKind.sticky:
         return StickyWidgetView(h: widget.h);
+      case WidgetKind.androidHosted:
+        return AndroidHostedWidgetView(widget: widget);
     }
   }
 }

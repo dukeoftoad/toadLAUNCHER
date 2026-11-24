@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="toad_lock_service_description">toadLAUNCHER — screen lock. Lets the launcher lock the screen on a double-tap. It watches nothing: no window content, no events.</string>
+    <string name="toad_notifications_label">toadLAUNCHER — notification dots. Counts active notifications per app to draw dots on home icons. Titles and text are never read or stored.</string>
+</resources>

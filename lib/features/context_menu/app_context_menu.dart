@@ -24,6 +24,16 @@ enum MenuContext {
   emptySpace,
 }
 
+/// One app shortcut row — the real LauncherApps shortcut list, wired
+/// by the host (default home only; Android enforces it).
+@immutable
+class MenuShortcut {
+  const MenuShortcut({required this.label, required this.onPick});
+
+  final String label;
+  final VoidCallback onPick;
+}
+
 /// Everything a menu row can trigger. The host wires the real behaviour;
 /// the popover stays dumb.
 @immutable
@@ -33,6 +43,7 @@ class MenuActions {
     required this.onWidgets,
     required this.onShare,
     required this.onUninstall,
+    this.shortcuts = const [],
     this.onEditHome,
     this.onRemove,
     this.onRename,
@@ -45,6 +56,11 @@ class MenuActions {
   final VoidCallback onWidgets;
   final VoidCallback onShare;
   final VoidCallback onUninstall;
+
+  /// App shortcuts (long-press quick actions) — rendered above the fixed
+  /// rows, capped at three so the popover stays calm.
+  final List<MenuShortcut> shortcuts;
+
   final VoidCallback? onEditHome;
   final VoidCallback? onRemove;
   final VoidCallback? onRename;
@@ -83,9 +99,14 @@ class _MenuItem {
 
 List<_MenuItem> _itemsFor(MenuRequest request) {
   final a = request.actions;
+  // Real app shortcuts ride above the fixed set — max three, calm menu.
+  final shortcutRows = [
+    for (final s in a.shortcuts.take(3)) _MenuItem('⤴', s.label, s.onPick),
+  ];
   switch (request.context) {
     case MenuContext.homeApp:
       return [
+        ...shortcutRows,
         _MenuItem('ⓘ', 'App info', a.onAppInfo),
         _MenuItem('▦', 'Widgets', a.onWidgets),
         _MenuItem('✎', 'Edit home screen', a.onEditHome!),
@@ -95,6 +116,7 @@ List<_MenuItem> _itemsFor(MenuRequest request) {
       ];
     case MenuContext.dockApp:
       return [
+        ...shortcutRows,
         _MenuItem('ⓘ', 'App info', a.onAppInfo),
         _MenuItem('▦', 'Widgets', a.onWidgets),
         _MenuItem('↗', 'Share', a.onShare),
@@ -104,6 +126,7 @@ List<_MenuItem> _itemsFor(MenuRequest request) {
     case MenuContext.drawerApp:
     case MenuContext.pondApp:
       return [
+        ...shortcutRows,
         _MenuItem('ⓘ', 'App info', a.onAppInfo),
         _MenuItem('▦', 'Widgets', a.onWidgets),
         _MenuItem('↗', 'Share', a.onShare),
@@ -111,6 +134,7 @@ List<_MenuItem> _itemsFor(MenuRequest request) {
       ];
     case MenuContext.folderApp:
       return [
+        ...shortcutRows,
         _MenuItem('ⓘ', 'App info', a.onAppInfo),
         _MenuItem('▦', 'Widgets', a.onWidgets),
         _MenuItem('↗', 'Share', a.onShare),

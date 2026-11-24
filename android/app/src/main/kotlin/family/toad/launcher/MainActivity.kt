@@ -2,24 +2,40 @@ package family.toad.launcher
 
 import android.app.DownloadManager
 import android.app.WallpaperManager
+import android.app.role.RoleManager
 import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
+import android.appwidget.AppWidgetHost
 import android.appwidget.AppWidgetManager
+import android.appwidget.AppWidgetProviderInfo
+import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.LauncherApps
+import android.content.pm.PackageManager
 import android.content.pm.PackageInstaller
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.drawable.AdaptiveIconDrawable
 import android.net.Uri
+import android.os.Build
+import android.os.Bundle
 import android.os.Environment
+import android.os.Process
 import android.provider.Settings
 import android.util.Log
+import android.view.View
+import android.widget.FrameLayout
+import android.widget.TextView
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import io.flutter.plugin.common.StandardMessageCodec
+import io.flutter.plugin.platform.PlatformView
+import io.flutter.plugin.platform.PlatformViewFactory
 import org.json.JSONObject
 import java.io.File
 import java.io.InputStream
@@ -27,13 +43,16 @@ import java.security.MessageDigest
 import java.util.concurrent.Executors
 
 /**
- * toadLAUNCHER — the ONE Kotlin file, deliberately thin.
+ * toadLAUNCHER — the ONE Kotlin adapter file, deliberately thin.
  *
  * Flutter owns every decision (indexing, family registry, update state
  * machine, version compare, settings, persistence). This adapter only
  * relays what the OS can do that Dart cannot: enumerate/launch apps,
- * usage stats, wallpaper, widget pinning, and the system DownloadManager
- * (whose process — not ours — holds the network, keeping the launcher
+ * usage stats, wallpaper, widget HOSTING (AppWidgetHost + platform
+ * views), default-home role, the notification shade, the lock screen
+ * (through the accessibility service), app shortcuts, notification
+ * counts, package-change events, and the system DownloadManager (whose
+ * process — not ours — holds the network, keeping the launcher
  * INTERNET-free).
  */
 class MainActivity : FlutterActivity() {
@@ -41,6 +60,18 @@ class MainActivity : FlutterActivity() {
     private val executor = Executors.newSingleThreadExecutor()
     private var channel: MethodChannel? = null
     private var pendingWallpaperResult: MethodChannel.Result? = null
+    private var widgetHost: AppWidgetHost? = null
+
+    /** Index refresh: installs / updates / removals land here live. */
+    private val packageEvents = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val pkg = intent.data?.schemeSpecificPart ?: return
+            channel?.invokeMethod(
+                "packagesChanged",
+                mapOf("action" to (intent.action ?: ""), "packageId" to pkg),
+            )
+        }
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -48,6 +79,13 @@ class MainActivity : FlutterActivity() {
             flutterEngine.dartExecutor.binaryMessenger,
             CHANNEL,
         )
+        flutterEngine.platformViewsController.registry
+            .registerViewFactory(VIEW_TYPE, ToadWidgetViewFactory(this))
+        // Notification counts arrive from the listener service (same
+        // process); relay them to Dart over the one channel.
+        ToadNotificationListener.onCountsChanged = { counts ->
+            channel?.invokeMethod("notificationCounts", counts)
+        }
         channel?.setMethodCallHandler { call, result ->
             when (call.method) {
                 "available" -> result.success(true)
@@ -87,6 +125,39 @@ class MainActivity : FlutterActivity() {
                 "pinWidget" -> onMain(result) {
                     pinWidget(call.argument<String>("providerId") ?: "")
                 }
+                "listHostableWidgets" -> onExecutor(result) { listHostableWidgets() }
+                "hostWidget" -> onMain(result) {
+                    hostWidget(call.argument<String>("providerId") ?: "")
+                }
+                "deleteHostedWidget" -> onMain(result) {
+                    deleteHostedWidget(
+                        (call.arguments as Map<*, *>)["appWidgetId"] as Number,
+                    )
+                }
+                "isDefaultHome" -> onMain(result) { isDefaultHome() }
+                "requestDefaultHome" -> onMain(result) { requestDefaultHome() }
+                "openNotifications" -> onMain(result) { expandNotificationsPanel() }
+                "lockScreen" -> onMain(result) { lockScreen() }
+                "isLockServiceEnabled" -> onMain(result) { isLockServiceEnabled() }
+                "openAccessibilitySettings" -> onMain(result) {
+                    openAccessibilitySettings()
+                }
+                "hasNotificationAccess" -> onMain(result) { hasNotificationAccess() }
+                "openNotificationListenerSettings" -> onMain(result) {
+                    openNotificationListenerSettings()
+                }
+                "appShortcuts" -> onExecutor(result) {
+                    appShortcuts(call.argument<String>("packageId") ?: "")
+                }
+                "startShortcut" -> onMain(result) {
+                    startShortcut(
+                        call.argument<String>("packageId") ?: "",
+                        call.argument<String>("shortcutId") ?: "",
+                    )
+                }
+                "shareApp" -> onMain(result) {
+                    shareApp(call.argument<String>("packageId") ?: "")
+                }
                 "checkLatestRelease" -> onExecutor(result) {
                     checkLatestRelease(call.argument<String>("repo") ?: "")
                 }
@@ -112,6 +183,52 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+    }
+
+    // ------------------------------------------------------------------
+    // lifecycle — widget host + package events
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        ToadNotificationListener.startWatching()
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_PACKAGE_ADDED)
+            addAction(Intent.ACTION_PACKAGE_REPLACED)
+            addAction(Intent.ACTION_PACKAGE_REMOVED)
+            addAction(Intent.ACTION_EXTERNAL_APPLICATIONS_AVAILABLE)
+            addAction(Intent.ACTION_EXTERNAL_APPLICATIONS_UNAVAILABLE)
+            addDataScheme("package")
+        }
+        if (Build.VERSION.SDK_INT >= 33) {
+            // Protected system broadcasts — NOT_EXPORTED still receives
+            // them; other apps can never spoof into this receiver.
+            registerReceiver(packageEvents, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("UnspecifiedRegisterReceiverOption")
+            registerReceiver(packageEvents, filter)
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        // Host must listen before createView so widgets receive updates.
+        ensureWidgetHost().startListening()
+    }
+
+    override fun onStop() {
+        widgetHost?.stopListening()
+        super.onStop()
+    }
+
+    override fun onDestroy() {
+        ToadNotificationListener.onCountsChanged = null
+        try {
+            unregisterReceiver(packageEvents)
+        } catch (e: Exception) {
+            Log.w(TAG, "package events receiver not registered", e)
+        }
+        executor.shutdown()
+        super.onDestroy()
     }
 
     // ------------------------------------------------------------------
@@ -176,10 +293,12 @@ class MainActivity : FlutterActivity() {
         return out
     }
 
-    /** Rasterize any drawable (incl. adaptive icons) to a 96 px PNG. */
-    private fun iconPng(drawable: android.graphics.drawable.Drawable): ByteArray? {
+    /** Rasterize any drawable (incl. adaptive icons) to a PNG. */
+    private fun iconPng(
+        drawable: android.graphics.drawable.Drawable,
+        size: Int = 96,
+    ): ByteArray? {
         return try {
-            val size = 96
             val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(bitmap)
             if (drawable is AdaptiveIconDrawable) {
@@ -550,9 +669,279 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    override fun onDestroy() {
-        executor.shutdown()
-        super.onDestroy()
+    // ------------------------------------------------------------------
+    // widget HOSTING — AppWidgetHost owns ids; views render through the
+    // "toad-widget-host" platform view (hybrid composition on the Dart
+    // side). Binding needs the default-home role; the UI explains that.
+
+    private fun ensureWidgetHost(): AppWidgetHost {
+        var host = widgetHost
+        if (host == null) {
+            host = AppWidgetHost(applicationContext, WIDGET_HOST_ID)
+            widgetHost = host
+        }
+        return host
+    }
+
+    /** Every widget provider on the phone — the picker's full shelf. */
+    private fun listHostableWidgets(): List<Map<String, Any?>> {
+        val awm = AppWidgetManager.getInstance(this)
+        val out = mutableListOf<Map<String, Any?>>()
+        for (info in awm.installedProviders) {
+            val cn = info.provider
+            out.add(
+                mapOf(
+                    "providerId" to cn.flattenToString(),
+                    "label" to (info.loadLabel(packageManager)?.toString() ?: cn.packageName),
+                    "packageName" to cn.packageName,
+                    "previewPng" to previewPng(info),
+                    "minWidth" to info.minWidth,
+                    "minHeight" to info.minHeight,
+                ),
+            )
+        }
+        return out
+    }
+
+    private fun previewPng(info: AppWidgetProviderInfo): ByteArray? {
+        return try {
+            val drawable = info.loadPreviewImage(this, 0) ?: info.loadIcon(this, 0)
+                ?: return null
+            iconPng(drawable, 144)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /** Allocate + bind. Returns the bound id, or null when refused
+     *  (refusal means "not the default home" — the UI says exactly that). */
+    private fun hostWidget(providerId: String): Int? {
+        return try {
+            val cn = ComponentName.unflattenFromString(providerId) ?: return null
+            val awm = AppWidgetManager.getInstance(this)
+            val host = ensureWidgetHost()
+            val id = host.allocateAppWidgetId()
+            if (awm.bindAppWidgetIdIfAllowed(id, cn)) id else {
+                host.deleteAppWidgetId(id)
+                null
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "hostWidget failed", e)
+            null
+        }
+    }
+
+    private fun deleteHostedWidget(appWidgetId: Number): Boolean {
+        return try {
+            ensureWidgetHost().deleteAppWidgetId(appWidgetId.toInt())
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /** Called by the platform-view factory (main thread) to inflate the
+     *  real AppWidgetHostView into [container]. */
+    fun renderWidgetInto(container: FrameLayout, appWidgetId: Int?, providerId: String?) {
+        val awm = AppWidgetManager.getInstance(this)
+        val info = appWidgetId?.let { awm.getAppWidgetInfo(it) }
+        val provider = info?.provider
+            ?: providerId?.let { ComponentName.unflattenFromString(it) }
+        if (appWidgetId == null || provider == null) {
+            container.addView(placeholderView("Widget gone — remove and add again"))
+            return
+        }
+        try {
+            val view = ensureWidgetHost().createView(this, appWidgetId, provider)
+            view.setPadding(0, 0, 0, 0)
+            container.addView(
+                view,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                ),
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "widget render failed", e)
+            container.addView(placeholderView("This widget could not load"))
+        }
+    }
+
+    private fun placeholderView(text: String): TextView {
+        val tv = TextView(this)
+        tv.text = text
+        tv.setPadding(24, 24, 24, 24)
+        return tv
+    }
+
+    // ------------------------------------------------------------------
+    // launcher-grade system integrations
+
+    private fun isDefaultHome(): Boolean {
+        return try {
+            if (Build.VERSION.SDK_INT >= 29) {
+                val rm = getSystemService(RoleManager::class.java)
+                rm != null && rm.isRoleHeld(RoleManager.ROLE_HOME)
+            } else {
+                val resolved = packageManager.resolveActivity(
+                    Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME),
+                    PackageManager.MATCH_DEFAULT_ONLY,
+                )
+                resolved?.activityInfo?.packageName == packageName
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /** Opens the system role dialog (API 29+) or the home settings page. */
+    private fun requestDefaultHome(): Boolean {
+        return try {
+            if (Build.VERSION.SDK_INT >= 29) {
+                val rm = getSystemService(RoleManager::class.java) ?: return false
+                if (!rm.isRoleAvailable(RoleManager.ROLE_HOME)) return false
+                startActivity(rm.createRequestRoleIntent(RoleManager.ROLE_HOME))
+                true
+            } else {
+                startActivity(Intent(Settings.ACTION_HOME_SETTINGS))
+                true
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /** Pulls the real notification shade (hidden StatusBarManager API —
+     *  the same call every third-party launcher uses). */
+    private fun expandNotificationsPanel(): Boolean {
+        return try {
+            val sbs = getSystemService(Context.STATUS_BAR_SERVICE) ?: return false
+            Class.forName("android.app.StatusBarManager")
+                .getMethod("expandNotificationsPanel")
+                .invoke(sbs)
+            true
+        } catch (e: Exception) {
+            Log.w(TAG, "shade expand unavailable", e)
+            false
+        }
+    }
+
+    /** Lock via the accessibility service (API 28+ global action). */
+    private fun lockScreen(): Boolean {
+        val service = ToadLockService.instance ?: return false
+        return try {
+            service.lockNow()
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun isLockServiceEnabled(): Boolean {
+        return try {
+            val enabled = Settings.Secure.getString(
+                contentResolver,
+                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
+            ) ?: return false
+            enabled.contains(packageName)
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun openAccessibilitySettings(): Boolean {
+        return try {
+            val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+            if (Build.VERSION.SDK_INT >= 26) {
+                intent.putExtra(
+                    Intent.EXTRA_COMPONENT_NAME,
+                    ComponentName(this, ToadLockService::class.java),
+                )
+            }
+            startActivity(intent)
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun hasNotificationAccess(): Boolean {
+        return try {
+            val enabled = Settings.Secure.getString(
+                contentResolver,
+                "enabled_notification_listeners",
+            ) ?: return false
+            enabled.split(":").any { it.contains(packageName) }
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun openNotificationListenerSettings(): Boolean {
+        return try {
+            startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /** Dynamic + manifest shortcuts of one app. Only the default home is
+     *  allowed to query them — an empty list says "nothing to show". */
+    private fun appShortcuts(pkg: String): List<Map<String, Any?>> {
+        if (!isDefaultHome()) return emptyList()
+        return try {
+            val la = getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
+            val query = LauncherApps.ShortcutQuery()
+                .setPackage(pkg)
+                .setQueryFlags(
+                    LauncherApps.ShortcutQuery.FLAG_MATCH_MANUAL or
+                        LauncherApps.ShortcutQuery.FLAG_MATCH_DYNAMIC,
+                )
+            val shortcuts = la.getShortcuts(query, Process.myUserHandle()) ?: emptyList()
+            shortcuts.take(4).map { s ->
+                mapOf(
+                    "id" to s.id,
+                    "label" to (
+                        s.shortLabel?.toString()
+                            ?: s.longLabel?.toString()
+                            ?: pkg
+                        ),
+                )
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun startShortcut(pkg: String, shortcutId: String): Boolean {
+        return try {
+            val la = getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
+            la.startShortcut(pkg, shortcutId, null, null, Process.myUserHandle())
+            true
+        } catch (e: Exception) {
+            Log.w(TAG, "startShortcut failed", e)
+            false
+        }
+    }
+
+    /** The old demo toast becomes a real ACTION_SEND chooser. */
+    private fun shareApp(pkg: String): Boolean {
+        return try {
+            val label = packageManager.getApplicationLabel(
+                packageManager.getApplicationInfo(pkg, 0),
+            )
+            val send = Intent(Intent.ACTION_SEND)
+                .setType("text/plain")
+                .putExtra(
+                    Intent.EXTRA_TEXT,
+                    "\"$label\" is on my toadLAUNCHER home ($pkg)",
+                )
+            startActivity(Intent.createChooser(send, "Share via"))
+            true
+        } catch (e: Exception) {
+            false
+        }
     }
 
     companion object {
@@ -560,5 +949,46 @@ class MainActivity : FlutterActivity() {
         private const val CHANNEL = "family.toad.launcher/device"
         private const val PICK_WALLPAPER = 7001
         private const val ACTION_INSTALL_STATUS = "family.toad.launcher.INSTALL_STATUS"
+        private const val WIDGET_HOST_ID = 0x70AD
+        const val VIEW_TYPE = "toad-widget-host"
+    }
+}
+
+/**
+ * The platform-view bridge — Flutter embeds real home-screen widgets
+ * through this factory (hybrid composition from Dart). Creation params:
+ *   appWidgetId  Int   — the AppWidgetHost id Dart persisted
+ *   providerId   String — flat ComponentName fallback
+ */
+class ToadWidgetViewFactory(
+    private val activity: MainActivity,
+) : PlatformViewFactory(StandardMessageCodec.INSTANCE) {
+
+    @Suppress("UNCHECKED_CAST")
+    override fun create(context: Context, viewId: Int, args: Any?): PlatformView {
+        val params = args as? Map<String, Any?> ?: emptyMap()
+        return ToadWidgetPlatformView(activity, params)
+    }
+}
+
+class ToadWidgetPlatformView(
+    activity: MainActivity,
+    params: Map<String, Any?>,
+) : PlatformView {
+
+    private val container = FrameLayout(activity)
+
+    init {
+        activity.renderWidgetInto(
+            container,
+            (params["appWidgetId"] as? Number)?.toInt(),
+            params["providerId"] as? String,
+        )
+    }
+
+    override fun getView(): View = container
+
+    override fun dispose() {
+        container.removeAllViews()
     }
 }

@@ -1,14 +1,19 @@
 /// toadLAUNCHER root — theme scope + home routing (pond vs sketchbook).
 library;
 
+import 'dart:async';
+
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'core/device/device_bridge.dart';
 import 'core/device/update_engine.dart';
+import 'core/repositories/app_repository.dart' show deviceCapabilityProvider;
 import 'core/settings/launcher_settings.dart';
 import 'core/theme/toad_theme.dart';
 import 'core/theme/toad_tokens.dart';
+import 'features/home/home_controller.dart';
 import 'features/home/home_screen.dart';
 import 'features/pond/pond_home.dart';
 
@@ -51,12 +56,60 @@ class _StartupCheck extends ConsumerStatefulWidget {
 }
 
 class _StartupCheckState extends ConsumerState<_StartupCheck> {
+  Timer? _refreshDebounce;
+
+  void _onPackagesChanged(String packageId, String action) {
+    // The index refreshes live when apps install / update / remove.
+    _refreshDebounce?.cancel();
+    _refreshDebounce = Timer(const Duration(milliseconds: 400), () {
+      if (!mounted) return;
+      final settings = ref.read(launcherSettingsProvider);
+      if (!settings.deviceMode) return;
+      ref.invalidate(deviceCapabilityProvider);
+      ref.invalidate(homeLayoutProvider);
+    });
+  }
+
+  void _refreshFromResume() {
+    _refreshDebounce?.cancel();
+    _refreshDebounce = Timer(const Duration(milliseconds: 500), () {
+      if (!mounted) return;
+      final settings = ref.read(launcherSettingsProvider);
+      if (!settings.deviceMode) return;
+      ref.invalidate(deviceCapabilityProvider);
+      ref.invalidate(isDefaultHomeProvider);
+      ref.invalidate(notificationAccessProvider);
+      ref.invalidate(homeLayoutProvider);
+    });
+  }
+
+  late final AppLifecycleListener _lifecycle;
+
+  void _onNotificationCounts(Map<String, int> counts) {
+    ref.read(notificationCountsProvider.notifier).state = counts;
+  }
+
   @override
   void initState() {
     super.initState();
+    final bridge = ref.read(deviceBridgeProvider);
+    bridge.addPackagesChangedListener(_onPackagesChanged);
+    bridge.addNotificationCountsListener(_onNotificationCounts);
+    _lifecycle = AppLifecycleListener(onResume: _refreshFromResume);
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       ref.read(updateEngineProvider.notifier).silentStartupCheck();
     });
+  }
+
+  @override
+  void dispose() {
+    final bridge = ref.read(deviceBridgeProvider);
+    bridge.removePackagesChangedListener(_onPackagesChanged);
+    bridge.removeNotificationCountsListener(_onNotificationCounts);
+    _refreshDebounce?.cancel();
+    _lifecycle.dispose();
+    super.dispose();
   }
 
   @override

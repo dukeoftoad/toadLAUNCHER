@@ -197,11 +197,16 @@ class HomeLayout {
   }
 }
 
-/// Widget kinds offered by the picker (screen 8).
-enum WidgetKind { clock, memories, calendar, sticky }
+/// Widget kinds offered by the picker (screen 8). `androidHosted` is the
+/// v0.11 addition: a real AppWidgetHost view living on the home grid.
+enum WidgetKind { clock, memories, calendar, sticky, androidHosted }
 
 /// One placed widget. Spans are in 4-column grid cells; heights in
 /// icon-row units (the honest edit-mode pitch).
+///
+/// For [WidgetKind.androidHosted] the widget also carries the Android
+/// side of the deal: the provider component, the AppWidgetHost id and a
+/// display label — persisted so the host view survives restarts.
 @immutable
 class PlacedWidget {
   const PlacedWidget({
@@ -210,6 +215,10 @@ class PlacedWidget {
     required this.page,
     required this.w,
     required this.h,
+    this.providerId,
+    this.appWidgetId,
+    this.label,
+    this.packageName,
   });
 
   final String id;
@@ -218,12 +227,22 @@ class PlacedWidget {
   final int w;
   final int h;
 
+  /// Hosted-widget extras (null for the local engines).
+  final String? providerId;
+  final int? appWidgetId;
+  final String? label;
+  final String? packageName;
+
   PlacedWidget copyWith({int? page, int? w, int? h}) => PlacedWidget(
     id: id,
     kind: kind,
     page: page ?? this.page,
     w: w ?? this.w,
     h: h ?? this.h,
+    providerId: providerId,
+    appWidgetId: appWidgetId,
+    label: label,
+    packageName: packageName,
   );
 
   @override

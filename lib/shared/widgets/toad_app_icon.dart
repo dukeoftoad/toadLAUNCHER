@@ -4,8 +4,10 @@ library;
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/device/device_bridge.dart' show notificationCountsProvider;
 import '../../core/models/models.dart';
 import '../../core/repositories/device_app_repository.dart';
+import '../../core/settings/launcher_settings.dart';
 import '../../core/theme/toad_tokens.dart';
 import '../../core/theme/toad_theme.dart';
 
@@ -44,7 +46,14 @@ class ToadAppIcon extends ConsumerWidget {
         ? AppIconGradients.toad
         : AppIconGradients.all[app.gradientIndex % AppIconGradients.all.length];
 
-    return Container(
+    // Live notification counts (v0.11) — dot for every active
+    // notification; written count when Badges is on too.
+    final settings = ref.watch(launcherSettingsProvider);
+    final count = settings.notificationDots && app.packageName != null
+        ? (ref.watch(notificationCountsProvider)[app.packageName!] ?? 0)
+        : 0;
+
+    final tile = Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
@@ -92,6 +101,49 @@ class ToadAppIcon extends ConsumerWidget {
                 ),
               ),
       ),
+    );
+
+    if (count <= 0) return tile;
+
+    final palette = ToadTheme.of(context).palette;
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        tile,
+        Positioned(
+          top: -3,
+          right: -3,
+          child: Container(
+            constraints: const BoxConstraints(
+              minWidth: 15,
+              minHeight: 15,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            decoration: BoxDecoration(
+              color: palette.accent,
+              shape: settings.badges ? BoxShape.rectangle : BoxShape.circle,
+              borderRadius: settings.badges
+                  ? BorderRadius.circular(999)
+                  : null,
+              border: Border.all(
+                color: palette.paper,
+                width: 1.4,
+              ),
+            ),
+            alignment: Alignment.center,
+            child: settings.badges
+                ? Text(
+                    count > 99 ? '99+' : '$count',
+                    style: ToadType.inter(
+                      8.5,
+                      weight: 700,
+                      color: Colors.white,
+                    ),
+                  )
+                : null,
+          ),
+        ),
+      ],
     );
   }
 }

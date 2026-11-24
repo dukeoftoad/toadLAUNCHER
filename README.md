@@ -6,36 +6,55 @@ network permission at all**.
 
 Built from the approved UI/UX design proposal v1.1 (14 mockups, 4 themes).
 
-## Status — v0.10.0-beta (device mode · API 37 · the whole family)
+## Status — v0.11.0-beta (the launcher infrastructure release)
 
-All four design stages remain implemented (walkthroughs below). v0.10 wires
-the launcher to the real phone:
+v0.10 wired the launcher to the phone; v0.11 closes the gap between "a
+Flutter app shaped like a home screen" and "a real launcher". Every item on
+the completeness checklist below is now real Android integration:
 
-- **Device mode** — the index comes from Android's package manager (labels,
-  adaptive icons, real launches). Falls back to demo honestly when the
-  channel does not answer; the switch lives in Settings → *Device &
-  updates*.
-- **Real actions** — uninstall (system dialog is the last word), App info,
-  SAF wallpaper import + apply. `REQUEST_DELETE_PACKAGES` and
-  `REQUEST_INSTALL_PACKAGES` declared; `PACKAGE_USAGE_STATS` is opt-in
-  special access for usage-based recents (off never nags).
-- **The toad family, themed** — every sibling is themed with the shared
-  toad-face tile and a pinned drawer section. Membership uses the
-  *verified* applicationIds (toadNOTES ships as `com.nestnote.app`,
-  toadTIMER as `dev.toad.toadtimer` — no prefix guessing), plus the
-  `family.toad.*` prefix for future siblings. Two or more installed apps
-  auto-curate the **toad family** folder, and their real home-screen
-  widgets appear in the picker with system-confirmed pinning.
+- **Default Home, verified** — Settings → *Device & updates* shows the HOME
+  role status, and a calm, dismissable, gesture-transparent banner offers
+  *make Home* (system role dialog) whenever toadLAUNCHER isn't the actual
+  Home app. Widgets and shortcuts key off this role — as Android intends.
+- **Device mode, fixed and loud** — v0.10's bridge provider shipped a
+  permanently null channel (device mode could never engage; the phone
+  silently showed demo apps). Fixed: the real channel is wired on Android.
+  If the bridge ever stops answering on a real phone, a banner now says why
+  demo apps are showing, with a retry — never a silent fallback.
+- **Real widget hosting (AppWidgetHost)** — the picker lists **every**
+  widget provider on the phone (live previews from the providers).
+  *Add* allocates an id from the launcher's own `AppWidgetHost`, binds it
+  (allowed for the default Home app), and lands it on the page — rendered
+  through hybrid-composition platform views, live-updating and
+  touch-reactive like a stock launcher. Placements persist across
+  restarts; removal releases the id. The family section (system-confirmed
+  pinning) stays.
+- **Real gestures** — swipe down pulls the **actual notification shade**
+  (status-bar expand call); double-tap locks the screen through a
+  minimal accessibility service (opt-in, one deep-linked toggle, retrieves
+  no window content); long-press *Share* opens the real share sheet.
+- **Live app index** — installs, updates and removals refresh the index
+  immediately (package broadcast → channel → reload), and the index also
+  refreshes on resume.
+- **Notification dots, real** — opt-in Notification access feeds live
+  per-package counts from a `NotificationListenerService` (package names
+  only — never titles or text). Dots follow the *Notification dots*
+  switch; *Badges* upgrades the dot to a written count.
+- **App shortcuts** — long-press menus list each app's real dynamic
+  shortcuts (LauncherApps) and start them; empty unless we are Home,
+  which Android enforces and the menu respects.
 - **Auto-update, toadFILES flow, zero INTERNET** — one silent check per
   process against `github.com/dukeoftoad/toadLAUNCHER/releases/latest`, a
   slim dismissable home banner, DownloadManager download with live
   progress, a SHA-256 gate, then the system installer. The download runs
   in the **system's process** — the launcher itself still holds **no
-  INTERNET permission**. Manual check + switches live in Settings.
-- **Kotlin budget: one file.** `MainActivity.kt` is a pure OS adapter —
-  every decision (index, registry, update state machine, version compare,
-  settings, persistence) is Flutter/Dart. CI runs on **target/compile
-  SDK 37**.
+  INTERNET permission**.
+- **Kotlin budget: one adapter file + two tiny services.**
+  `MainActivity.kt` is a pure OS adapter — every decision (index, family
+  registry, update state machine, version compare, settings, persistence,
+  widget placements) is Flutter/Dart. `ToadLockService` (screen lock) and
+  `ToadNotificationListener` (dots) are opt-in system hooks, not adapters.
+  CI runs on **target/compile SDK 37**.
 
 | Stage | Scope | State |
 |---|---|---|
@@ -44,6 +63,33 @@ the launcher to the real phone:
 | 3 (M2b/M3) | Edit mode with honest snapping, widget picker, wallpaper & style, settings hub + gestures | **done** |
 | 4 (M4) | Pond ambient loop, mouth drawer, Calm-pond + battery guard | **done** |
 | 5 (v0.10) | Device mode, real permissions, toad family theming, auto-update, API 37 | **done** |
+| 6 (v0.11) | Launcher infrastructure: default-home verification, AppWidgetHost hosting, live index, shade + lock + share, notification dots, app shortcuts, honest fallback | **done** |
+
+## Stage 6 walkthrough (the launcher infrastructure)
+
+- **Make it Home, honestly** — the *Default home screen* row states the
+  role plainly ("toadLAUNCHER is your Home…" / "Another app is Home…"),
+  and the home banner offers the one-tap fix. The banner never swallows
+  gestures: taps and swipes pass through its paper; only its pills react.
+- **The widget shelf** — picker section *real Android widgets — live from
+  this phone*: provider previews, honest `provider/package` captions, and
+  the rule spelled out ("real widgets need toadLAUNCHER as your Home —
+  Android binds them to the Home app"). When not Home, *add* opens the
+  system role dialog instead of pretending. Hosted widgets live in the
+  same widget stack as the local engines: same edit mode, same move
+  gestures, same undoable toasts; their `AppWidgetHost` ids survive
+  restarts (the OS keeps the binding until we delete the id).
+- **Dots that mean something** — grant Notification access once (the
+  exact settings toggle opens from *Notifications* settings); every
+  active notification lights a dot on that app's icon, everywhere icons
+  render. Ongoing (persistent) notifications never count — chips are not
+  news. Counts die with the process and re-seed from the live shade on
+  reconnect.
+- **The lock service** — smallest legal accessibility footprint
+  (`canRetrieveWindowContent=false`, no event subscriptions, no
+  feedback channels): it exists to perform the API 28+ screen-lock global
+  action. Double-tap then locks; if the service is off, the toast says so
+  and the Accessibility settings open pre-targeted at the component.
 
 ## Stage 4 walkthrough (the pond comes alive)
 
@@ -69,10 +115,9 @@ the launcher to the real phone:
   past the top and it hiccups a bubble.
 - **Calm pond + battery guard** — Calm-pond (or an active battery saver on
   device) falls night instantly and freezes the whole loop into a still
-  painting — zero animation cost. The demo never fakes a battery read:
-  the guard is honored once device mode ships.
+  painting — zero animation cost.
 
-## Stage 3 walkthrough (demo mode)
+## Stage 3 walkthrough
 
 - **Edit mode** (screen 7) — long-press → *Edit home screen*, or pinch-in.
   Faint grid lines (12% ink) show the real 4-column cells; the selected
@@ -85,23 +130,28 @@ the launcher to the real phone:
   same engines as the placed widgets, never stock images). toadGALLERY's
   Memories strip is the featured first citizen; the Caveat clock, a real
   month calendar (4x4, local only) and a Patrick Hand sticky note round out
-  the set. Placed kinds stay tappable and explain themselves calmly; picking
+  the set — and, since v0.11, every real widget provider on the phone.
+  Placed kinds stay tappable and explain themselves calmly; picking
   drops you straight into edit mode with the widget attached — drag it onto
   home and it snaps into the page's widget stack.
 - **Wallpaper & style** (screen 9) — bundled sketchbook papers (user photos
-  arrive with device mode), Auto/Light/Dark/AMOLED segmented control, six
-  accent stickers with instant re-tint, squircle/circle/rounded icon shapes,
-  and the Pond Pro switch. Everything offline; papers ship inside the APK.
+  import via SAF in device mode), Auto/Light/Dark/AMOLED segmented control,
+  six accent stickers with instant re-tint, squircle/circle/rounded icon
+  shapes, and the Pond Pro switch. Everything offline; papers ship inside
+  the APK.
 - **Settings hub** (screen 10) — hub-plus-pages with honest subtitles that
   compose themselves from live settings. The gestures sub-page mirrors the
   mockup: swipe-up drawer, double-tap sleep, swipe-down shade, two-finger
-  screenshot (off — can clash with system shortcuts), pinch for edit mode,
-  dock-area swipe for search (off). Switches apply live, no save button.
+  screenshot (off — Android 11+ restricts the global action for
+  accessibility services, so it stays a demo-honest gesture), pinch for
+  edit mode, dock-area swipe for search (off). Switches apply live, no
+  save button.
 - **Gesture map** (screen 11) — tap icon launches; tap the clock opens
-  Clock; swipe up drawer; swipe down shade (demo says so honestly); pinch
-  edit mode; double-tap sleep demo; dock-area swipe opens search.
+  Clock; swipe up drawer; swipe down pulls the real shade (device) or says
+  so honestly (demo); pinch edit mode; double-tap locks (device, opt-in
+  service) or says so (demo); dock-area swipe opens search.
 
-## Stage 2 walkthrough (demo mode)
+## Stage 2 walkthrough
 
 - **Drawer** — swipe up anywhere (or tap the dock chevron / the log's APPS
   handle). Frosted-paper sheet over the home: sticky search pill, recents row
@@ -112,25 +162,41 @@ the launcher to the real phone:
   dimmed, 6 px-blurred home. Tap the Caveat title to rename inline; more than
   9 apps paginate with home-style dots.
 - **Long-press menus** — icons raise a 180 ms scale-in popover beside them
-  (app info / widgets / share / remove / uninstall…). Remove takes the icon
-  off that page only; Uninstall is danger-colored and always asks twice.
-  Empty space shows the smaller trio: Wallpaper & style · Widgets · Home
-  settings. Device-only actions say so honestly — demo mode never pretends.
+  (app shortcuts · app info / widgets / share / remove / uninstall…). Share
+  opens the real chooser in device mode. Remove takes the icon off that page
+  only; Uninstall is danger-colored and always asks twice. Empty space shows
+  the smaller trio: Wallpaper & style · Widgets · Home settings. Device-only
+  actions say so honestly — demo mode never pretends.
 
 ## Install the beta (signed APK)
 
-Grab `toadlauncher-v0.9.0-beta-universal-install.apk` from the latest GitHub
-**Release** page (or the `toadlauncher-release-apk` artifact of any run).
+Grab `toadlauncher-v0.11.0-beta-universal-install.apk` from the **v0.11.0-beta
+Release** page (or the `toadlauncher-release-apk` artifact of any run).
 
-1. **If an older CI build is installed, uninstall it first.** Builds made
-   before v0.9.0-beta were signed with a *random per-run debug keystore*, so
-   Android refused updates with "App not installed" — that was the install
-   bug; it is fixed from this release on.
+1. Updates from v0.9.0-beta or later install straight over — same signing
+   key since the v0.9.0-beta fix. (Builds *older* than v0.9.0-beta were
+   signed with a random per-run debug keystore and must be uninstalled
+   once.)
 2. Allow *Install unknown apps* for your file manager / browser when asked.
-3. Requires **Android 8.0+** (minSdk 26). The APK is universal — every ABI.
-4. After install: Home → default launcher → **toadLAUNCHER**.
+3. Requires **Android 8.0+** (minSdk 26); the lock gesture needs **Android
+   9+**. The APK is universal — every ABI.
+4. After install: Home → default launcher → **toadLAUNCHER** (or tap
+   *make Home* in the banner).
 5. Verify integrity (optional): the release ships a `.sha256` alongside the
    APK.
+
+## Permissions, plainly
+
+| Permission | Why | Ask? |
+|---|---|---|
+| `QUERY_ALL_PACKAGES` | build the local app index | never — silent, sideload-only app |
+| `SET_WALLPAPER` | wallpaper & style | never |
+| `REQUEST_DELETE_PACKAGES` | real uninstall via system dialog | never — system confirms |
+| `REQUEST_INSTALL_PACKAGES` | self-update through the system installer | system dialog at install time |
+| `PACKAGE_USAGE_STATS` | usage-based recents (opt-in) | only if you flip the switch |
+| Notification access | real dots (opt-in) | only from Notifications settings |
+| Accessibility (lock) | double-tap sleep (opt-in) | only on first lock attempt |
+| `INTERNET` | — | **never. not now, not ever** |
 
 ## Signing
 
@@ -144,19 +210,20 @@ strip it from history.)
 ## Release process
 
 ```bash
-git add -A && git commit -m "release: v0.9.0-beta"
-git tag v0.9.0-beta
+git add -A && git commit -m "release: v0.11.0-beta"
+git tag v0.11.0-beta
 git push origin main --tags
 ```
 
 CI runs analyze → test → signed universal APK, then publishes a GitHub
-Release named `toadLAUNCHER v0.9.0-beta` with the APK + sha256 attached.
+Release named `toadLAUNCHER v0.11.0-beta` with the APK + sha256 attached.
 
 ## Verify locally
 
 ```bash
 flutter analyze   # zero issues
-flutter test      # 93 tests — incl. bridge contract, family registry, update engine
+flutter test      # 106 tests — incl. bridge contract, widget hosting,
+                  # package events, notification counts, banner honesty
 flutter run       # demo mode: the proposal's app set, no device needed
 ```
 
@@ -185,10 +252,15 @@ transcribed 1:1 from the design proposal (colours, radii, motion timings).
 ## Product invariants
 
 - No `INTERNET` permission, ever. Fonts are bundled TTFs (Caveat, Patrick
-  Hand, Inter) — no runtime font fetch.
+  Hand, Inter) — no runtime font fetch; update checks ride the system
+  download service.
 - Remove is not uninstall; destructive actions confirm.
-- App index renders locally; demo mode ships the proposal's demo app set
-  behind the `AppRepository` seam (device-backed implementation lands in a
-  later stage).
+- The app index renders locally. Device mode is real (package manager) and
+  demo mode is the honest fallback — when a real phone's bridge fails, a
+  banner says so; a pure non-Android surface stays quietly demo.
+- Real widgets are hosted, not drawn: the AppWidgetHost owns ids and views;
+  placements persist; removal releases the id.
+- Opt-in services (lock, notification dots) request the minimum: the lock
+  service watches nothing, the dots service reads package names only.
 - Pond ambient animations pause when invisible, on battery saver, or when
-  Calm-pond is on (stage 4).
+  Calm-pond is on.

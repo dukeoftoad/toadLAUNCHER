@@ -516,7 +516,7 @@ void main() {
     await tester.pumpAndSettle(const Duration(milliseconds: 400));
 
     expect(
-      find.textContaining('Double-tap sleep needs the write-settings'),
+      find.textContaining('Double-tap sleep needs a real device'),
       findsOneWidget,
     );
 

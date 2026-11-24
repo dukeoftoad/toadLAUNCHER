@@ -190,6 +190,7 @@ class WidgetPickerSheet extends ConsumerWidget {
                                   )
                                 : () => _pick(context, ref, WidgetKind.sticky),
                           ),
+                          const _AndroidWidgetsSection(),
                           const _FamilyWidgetsSection(),
                         ],
                       ),
@@ -545,6 +546,8 @@ class _GhostPreview extends StatelessWidget {
             WidgetKind.memories => const _MemoriesPreview(),
             WidgetKind.calendar => const _CalendarPreview(),
             WidgetKind.sticky => const _StickyPreview(),
+            // Real widgets never ride the ghost — they land instantly.
+            WidgetKind.androidHosted => const SizedBox.shrink(),
           },
         ),
       ),
@@ -660,6 +663,221 @@ class _FamilyWidgetsSectionState extends ConsumerState<_FamilyWidgetsSection> {
                     ],
                   ),
                 ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// The v0.11 shelf — every real home-screen widget provider on the phone,
+/// listed from the actual AppWidgetManager. "Add" allocates an id from
+/// OUR AppWidgetHost, binds it (Android allows the default Home app to
+/// bind), and lands it straight on the current page. When the launcher
+/// is not yet Home, the row explains exactly that — never a silent lie.
+class _AndroidWidgetsSection extends ConsumerStatefulWidget {
+  const _AndroidWidgetsSection();
+
+  @override
+  ConsumerState<_AndroidWidgetsSection> createState() =>
+      _AndroidWidgetsSectionState();
+}
+
+class _AndroidWidgetsSectionState extends ConsumerState<_AndroidWidgetsSection> {
+  late Future<List<HostableWidgetInfo>> _future;
+  bool _hosting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = ref.read(deviceBridgeProvider).listHostableWidgets();
+  }
+
+  Future<void> _add(BuildContext context, HostableWidgetInfo info) async {
+    if (_hosting) return;
+    _hosting = true;
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    try {
+      final bridge = ref.read(deviceBridgeProvider);
+      final isHome = await bridge.isDefaultHome();
+      if (isHome) {
+        final appWidgetId = await bridge.hostWidget(info.providerId);
+        if (appWidgetId == null) {
+          messenger
+            ..clearSnackBars()
+            ..showSnackBar(SnackBar(content: Text(
+              'Android refused the binding — make toadLAUNCHER your Home '
+              'and try again',
+            )));
+          return;
+        }
+        final page = ref.read(currentPageProvider);
+        final placed = ref.read(homeLayoutProvider.notifier).placeHostedWidget(
+          page: page,
+          index: 0,
+          providerId: info.providerId,
+          label: info.label,
+          packageName: info.packageName,
+          appWidgetId: appWidgetId,
+        );
+        if (placed) {
+          ref
+              .read(homeLayoutProvider.notifier)
+              .commitAction(null, message: '${info.label} placed — a real, '
+                  'live Android widget');
+          navigator.pop();
+        }
+      } else {
+        messenger
+          ..clearSnackBars()
+          ..showSnackBar(SnackBar(content: Text(
+            'toadLAUNCHER must be your Home to host real widgets — the '
+            'choice dialog is opening',
+          )));
+        await bridge.requestDefaultHome();
+      }
+    } finally {
+      _hosting = false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final skin = ToadTheme.of(context);
+    final palette = skin.palette;
+    final dark = skin.isDark;
+    final ink = dark ? const Color(0xFFE8E2D4) : palette.ink;
+
+    return FutureBuilder<List<HostableWidgetInfo>>(
+      future: _future,
+      builder: (context, snap) {
+        final widgets = snap.data ?? const <HostableWidgetInfo>[];
+        if (snap.connectionState != ConnectionState.done || widgets.isEmpty) {
+          return const SizedBox.shrink();
+        }
+        final sorted = [...widgets]..sort(
+            (a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()),
+          );
+        return Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 6, 8, 2),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'real Android widgets — live from this phone',
+                    style: ToadType.caveat(21, color: palette.ink),
+                  ),
+                ),
+              ),
+              for (final w in sorted)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => _add(context, w),
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 4),
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: palette.surface
+                            .withValues(alpha: palette.surface.a * 0.9),
+                        borderRadius: BorderRadius.circular(ToadRadii.card - 4),
+                        border: Border.all(color: palette.hairline),
+                      ),
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: ToadMetrics.widgetPreviewWidth,
+                            height: ToadMetrics.widgetPreviewHeight,
+                            child: w.previewPng != null
+                                ? Padding(
+                                    padding: const EdgeInsets.all(3),
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: Image.memory(
+                                        w.previewPng!,
+                                        fit: BoxFit.contain,
+                                        gaplessPlayback: true,
+                                      ),
+                                    ),
+                                  )
+                                : Center(
+                                    child: Text(
+                                      '▦',
+                                      style: ToadType.hand(
+                                        24,
+                                        color: ink.withValues(
+                                          alpha: ink.a * 0.5,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  w.label,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: ToadType.hand(14.5, color: ink),
+                                ),
+                                const SizedBox(height: 1),
+                                Text(
+                                  w.packageName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: ToadType.inter(
+                                    10.5,
+                                    color: ink.withValues(alpha: ink.a * 0.55),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 7,
+                            ),
+                            decoration: BoxDecoration(
+                              color: palette.accentWash,
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              'add',
+                              style: ToadType.hand(
+                                13,
+                                color: palette.accentInk,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 2, 8, 0),
+                child: Text(
+                  'real widgets need toadLAUNCHER as your Home — Android '
+                  'binds them to the Home app',
+                  style: ToadType.inter(
+                    10.5,
+                    height: 1.3,
+                    color: ink.withValues(alpha: ink.a * 0.5),
+                  ),
+                ),
+              ),
             ],
           ),
         );
