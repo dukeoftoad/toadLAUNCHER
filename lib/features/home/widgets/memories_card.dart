@@ -64,8 +64,9 @@ class MemoriesCard extends StatelessWidget {
                         data.meta,
                         style: ToadType.inter(
                           11,
-                          color: palette.ink
-                              .withValues(alpha: palette.ink.a * 0.6),
+                          color: palette.ink.withValues(
+                            alpha: palette.ink.a * 0.6,
+                          ),
                         ),
                       ),
                     ],
@@ -77,8 +78,9 @@ class MemoriesCard extends StatelessWidget {
                         if (i > 0) const SizedBox(width: 8),
                         Expanded(
                           child: _MemoryPhoto(
-                            gradient: AppIconGradients.memoryPhotos[
-                                i % AppIconGradients.memoryPhotos.length],
+                            gradient:
+                                AppIconGradients.memoryPhotos[i %
+                                    AppIconGradients.memoryPhotos.length],
                           ),
                         ),
                       ],

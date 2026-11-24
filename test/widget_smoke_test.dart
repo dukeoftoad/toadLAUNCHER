@@ -33,16 +33,15 @@ Future<void> pumpHome(WidgetTester tester, {required bool pondPro}) async {
 
 extension TesterX on WidgetTester {
   Finder textRegExp(RegExp pattern) => find.byWidgetPredicate(
-        (widget) =>
-            widget is Text &&
-            widget.data != null &&
-            pattern.hasMatch(widget.data!),
-      );
+    (widget) =>
+        widget is Text && widget.data != null && pattern.hasMatch(widget.data!),
+  );
 }
 
 void main() {
-  testWidgets('sketchbook home renders hero clock, grid and dock',
-      (tester) async {
+  testWidgets('sketchbook home renders hero clock, grid and dock', (
+    tester,
+  ) async {
     await pumpHome(tester, pondPro: false);
     await tester.pumpAndSettle(const Duration(seconds: 1));
 

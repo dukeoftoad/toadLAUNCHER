@@ -12,10 +12,7 @@ import 'package:toadlauncher/features/home/home_controller.dart';
 import 'package:toadlauncher/features/home/home_screen.dart';
 import 'package:toadlauncher/features/pond/pond_home.dart';
 
-Future<void> pumpHome(
-  WidgetTester tester, {
-  bool pondPro = false,
-}) async {
+Future<void> pumpHome(WidgetTester tester, {bool pondPro = false}) async {
   SharedPreferences.setMockInitialValues(<String, Object>{});
   await tester.pumpWidget(
     ProviderScope(
@@ -25,9 +22,9 @@ Future<void> pumpHome(
         ),
       ],
       child: MaterialApp(
-        home: ToadThemeScope(
-          child: pondPro ? const PondHome() : const HomeScreen(),
-        ),
+        builder: (context, child) =>
+            ToadThemeScope(child: child ?? const SizedBox.shrink()),
+        home: pondPro ? const PondHome() : const HomeScreen(),
       ),
     ),
   );
@@ -45,6 +42,14 @@ void main() {
     'drawer opens from the dock handle: search pill, recents, A-Z, badge',
     (tester) async {
       await pumpHome(tester);
+
+      // Badges are off by default (screen 10); this user turned them on.
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(HomeScreen)),
+      );
+      container.read(launcherSettingsProvider.notifier).setBadges(true);
+      await tester.pump();
+
       await openDrawer(tester);
 
       expect(find.text('Search apps'), findsOneWidget);
@@ -64,8 +69,9 @@ void main() {
     },
   );
 
-  testWidgets('drawer also opens over Pond Pro and shows the wash', 
-      (tester) async {
+  testWidgets('drawer also opens over Pond Pro and shows the wash', (
+    tester,
+  ) async {
     await pumpHome(tester, pondPro: true);
     await openDrawer(tester);
 
@@ -73,8 +79,7 @@ void main() {
     expect(find.text('the resident'), findsOneWidget); // pond still behind
   });
 
-  testWidgets('search filters instantly and restores on clear',
-      (tester) async {
+  testWidgets('search filters instantly and restores on clear', (tester) async {
     await pumpHome(tester);
     await openDrawer(tester);
 
@@ -109,14 +114,19 @@ void main() {
 
     // Fling down on a recents tile (inside the header gesture zone) — a
     // real velocity so primaryVelocity clears the 120 threshold.
-    await tester.fling(find.text('toadGALLERY').last, const Offset(0, 160), 600);
+    await tester.fling(
+      find.text('toadGALLERY').last,
+      const Offset(0, 160),
+      600,
+    );
     await tester.pumpAndSettle(const Duration(milliseconds: 400));
 
     expect(find.text('Search apps'), findsNothing);
   });
 
-  testWidgets('drawer row long-press shows the drawer variant (no Remove)',
-      (tester) async {
+  testWidgets('drawer row long-press shows the drawer variant (no Remove)', (
+    tester,
+  ) async {
     await pumpHome(tester);
     await openDrawer(tester);
 
@@ -133,37 +143,35 @@ void main() {
       return layout;
     }
 
-    test('recordLaunch moves an app to the front of recents, cap 4',
-        () async {
-      final container = ProviderContainer(overrides: [
-        clockProvider.overrideWith(
-          (ref) => Stream.value(DateTime(2026, 11, 24, 10, 42)),
-        ),
-      ]);
+    test('recordLaunch moves an app to the front of recents, cap 4', () async {
+      final container = ProviderContainer(
+        overrides: [
+          clockProvider.overrideWith(
+            (ref) => Stream.value(DateTime(2026, 11, 24, 10, 42)),
+          ),
+        ],
+      );
       addTearDown(container.dispose);
       final layout = await seeded(container);
       expect(layout.recents.first.id, 'family.toad.gallery');
 
-      final camera =
-          layout.allApps.firstWhere((a) => a.id == 'camera');
+      final camera = layout.allApps.firstWhere((a) => a.id == 'camera');
       container.read(homeLayoutProvider.notifier).recordLaunch(camera);
 
       final after = container.read(homeLayoutProvider).value!;
       expect(after.recents.first.id, 'camera');
       expect(after.recents.length, 4);
-      expect(
-        after.recents.any((a) => a.id == 'family.toad.gallery'),
-        isTrue,
-      );
+      expect(after.recents.any((a) => a.id == 'family.toad.gallery'), isTrue);
     });
 
-    test('removePageCell drops the app; an emptied page disappears',
-        () async {
-      final container = ProviderContainer(overrides: [
-        clockProvider.overrideWith(
-          (ref) => Stream.value(DateTime(2026, 11, 24, 10, 42)),
-        ),
-      ]);
+    test('removePageCell drops the app; an emptied page disappears', () async {
+      final container = ProviderContainer(
+        overrides: [
+          clockProvider.overrideWith(
+            (ref) => Stream.value(DateTime(2026, 11, 24, 10, 42)),
+          ),
+        ],
+      );
       addTearDown(container.dispose);
       await seeded(container);
       final notifier = container.read(homeLayoutProvider.notifier);
@@ -181,13 +189,14 @@ void main() {
       expect(layout.pages.length, 2);
     });
 
-    test('renameFolder patches the folders list and the page tile',
-        () async {
-      final container = ProviderContainer(overrides: [
-        clockProvider.overrideWith(
-          (ref) => Stream.value(DateTime(2026, 11, 24, 10, 42)),
-        ),
-      ]);
+    test('renameFolder patches the folders list and the page tile', () async {
+      final container = ProviderContainer(
+        overrides: [
+          clockProvider.overrideWith(
+            (ref) => Stream.value(DateTime(2026, 11, 24, 10, 42)),
+          ),
+        ],
+      );
       addTearDown(container.dispose);
       await seeded(container);
 
@@ -201,38 +210,39 @@ void main() {
       expect(tile.folder.title, 'Pond media');
     });
 
-    test('removeAppFromFolder removes the app; empty folders come off',
-        () async {
-      final container = ProviderContainer(overrides: [
-        clockProvider.overrideWith(
-          (ref) => Stream.value(DateTime(2026, 11, 24, 10, 42)),
-        ),
-      ]);
-      addTearDown(container.dispose);
-      await seeded(container);
-      final notifier = container.read(homeLayoutProvider.notifier);
+    test(
+      'removeAppFromFolder removes the app; empty folders come off',
+      () async {
+        final container = ProviderContainer(
+          overrides: [
+            clockProvider.overrideWith(
+              (ref) => Stream.value(DateTime(2026, 11, 24, 10, 42)),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+        await seeded(container);
+        final notifier = container.read(homeLayoutProvider.notifier);
 
-      notifier.removeAppFromFolder('media', 'youtube');
-      var layout = container.read(homeLayoutProvider).value!;
-      expect(layout.folderById('media')!.apps.length, 7);
-      expect(
-        (layout.pages[1].first as FolderCell).folder.apps.length,
-        7,
-      );
+        notifier.removeAppFromFolder('media', 'youtube');
+        var layout = container.read(homeLayoutProvider).value!;
+        expect(layout.folderById('media')!.apps.length, 7);
+        expect((layout.pages[1].first as FolderCell).folder.apps.length, 7);
 
-      // Drain the whole folder → the tile leaves the page.
-      for (final app
-          in layout.folderById('media')!.apps.toList()) {
-        notifier.removeAppFromFolder('media', app.id);
-      }
-      layout = container.read(homeLayoutProvider).value!;
-      expect(layout.folderById('media'), isNull);
-      expect(layout.pages[1].first, isA<AppCell>());
-    });
+        // Drain the whole folder → the tile leaves the page.
+        for (final app in layout.folderById('media')!.apps.toList()) {
+          notifier.removeAppFromFolder('media', app.id);
+        }
+        layout = container.read(homeLayoutProvider).value!;
+        expect(layout.folderById('media'), isNull);
+        expect(layout.pages[1].first, isA<AppCell>());
+      },
+    );
   });
 
-  testWidgets('long-press on a grid icon raises the menu; Remove works',
-      (tester) async {
+  testWidgets('long-press on a grid icon raises the menu; Remove works', (
+    tester,
+  ) async {
     await pumpHome(tester);
 
     await tester.longPress(find.text('Phone'));
@@ -253,8 +263,9 @@ void main() {
     expect(find.text('Removed "Phone" from this page'), findsOneWidget);
   });
 
-  testWidgets('uninstall is a two-step confirm and can be declined',
-      (tester) async {
+  testWidgets('uninstall is a two-step confirm and can be declined', (
+    tester,
+  ) async {
     await pumpHome(tester);
 
     await tester.longPress(find.text('Phone'));
@@ -283,8 +294,9 @@ void main() {
     expect(find.text('Home settings'), findsOneWidget);
   });
 
-  testWidgets('folder tile opens the card; rename commits inline',
-      (tester) async {
+  testWidgets('folder tile opens the card; rename commits inline', (
+    tester,
+  ) async {
     await pumpHome(tester);
 
     // Swipe to page 2 where the Media folder tile leads the grid.
@@ -316,8 +328,9 @@ void main() {
     expect(find.text('Add app'), findsNothing);
   });
 
-  testWidgets('folder item long-press offers "Remove from folder"',
-      (tester) async {
+  testWidgets('folder item long-press offers "Remove from folder"', (
+    tester,
+  ) async {
     await pumpHome(tester);
 
     await tester.drag(find.text('Clock'), const Offset(-420, 0));

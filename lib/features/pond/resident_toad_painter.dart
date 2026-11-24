@@ -24,12 +24,18 @@ class ResidentToadPainter extends CustomPainter {
     fill.color = p.toadFeet;
     canvas.drawOval(
       Rect.fromCenter(
-          center: Offset(26 * sx, 66 * sy), width: 30 * sx, height: 14 * sy),
+        center: Offset(26 * sx, 66 * sy),
+        width: 30 * sx,
+        height: 14 * sy,
+      ),
       fill,
     );
     canvas.drawOval(
       Rect.fromCenter(
-          center: Offset(94 * sx, 66 * sy), width: 30 * sx, height: 14 * sy),
+        center: Offset(94 * sx, 66 * sy),
+        width: 30 * sx,
+        height: 14 * sy,
+      ),
       fill,
     );
 
@@ -49,7 +55,10 @@ class ResidentToadPainter extends CustomPainter {
     fill.color = p.toadBelly;
     canvas.drawOval(
       Rect.fromCenter(
-          center: Offset(60 * sx, 57 * sy), width: 66 * sx, height: 26 * sy),
+        center: Offset(60 * sx, 57 * sy),
+        width: 66 * sx,
+        height: 26 * sy,
+      ),
       fill,
     );
 
@@ -130,9 +139,10 @@ class ResidentToadPainter extends CustomPainter {
         ..style = PaintingStyle.fill;
       canvas.drawOval(
         Rect.fromCenter(
-            center: Offset(60 * sx, 63 * sy),
-            width: 30 * sx,
-            height: 13 * sy),
+          center: Offset(60 * sx, 63 * sy),
+          width: 30 * sx,
+          height: 13 * sy,
+        ),
         fill,
       );
     }

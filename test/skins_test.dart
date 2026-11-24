@@ -17,17 +17,16 @@ void main() {
     bool pondPro = false,
     Brightness brightness = Brightness.light,
     DateTime? now,
-  }) =>
-      resolveSkin(
-        mode: mode,
-        pondPro: pondPro,
-        systemBrightness: brightness,
-        now: now ?? noon,
-        sunsetHour: 19,
-        sunsetMinute: 30,
-        sunriseHour: 6,
-        sunriseMinute: 30,
-      );
+  }) => resolveSkin(
+    mode: mode,
+    pondPro: pondPro,
+    systemBrightness: brightness,
+    now: now ?? noon,
+    sunsetHour: 19,
+    sunsetMinute: 30,
+    sunriseHour: 6,
+    sunriseMinute: 30,
+  );
 
   test('explicit modes override system', () {
     expect(

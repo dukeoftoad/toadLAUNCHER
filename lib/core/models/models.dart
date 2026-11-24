@@ -42,14 +42,14 @@ class AppEntry {
   final String? badge;
 
   AppEntry copyWith({String? badge}) => AppEntry(
-        id: id,
-        name: name,
-        glyph: glyph,
-        gradientIndex: gradientIndex,
-        isFamilyToad: isFamilyToad,
-        packageName: packageName,
-        badge: badge ?? this.badge,
-      );
+    id: id,
+    name: name,
+    glyph: glyph,
+    gradientIndex: gradientIndex,
+    isFamilyToad: isFamilyToad,
+    packageName: packageName,
+    badge: badge ?? this.badge,
+  );
 
   @override
   bool operator ==(Object other) => other is AppEntry && other.id == id;
@@ -61,21 +61,14 @@ class AppEntry {
 /// A folder ("Media"): 3x3 card, shared-axis open, inline rename.
 @immutable
 class FolderData {
-  const FolderData({
-    required this.id,
-    required this.title,
-    required this.apps,
-  });
+  const FolderData({required this.id, required this.title, required this.apps});
 
   final String id;
   final String title;
   final List<AppEntry> apps;
 
-  FolderData copyWith({String? title, List<AppEntry>? apps}) => FolderData(
-        id: id,
-        title: title ?? this.title,
-        apps: apps ?? this.apps,
-      );
+  FolderData copyWith({String? title, List<AppEntry>? apps}) =>
+      FolderData(id: id, title: title ?? this.title, apps: apps ?? this.apps);
 
   @override
   bool operator ==(Object other) => other is FolderData && other.id == id;
@@ -154,6 +147,7 @@ class HomeLayout {
     required this.allApps,
     required this.folders,
     required this.memory,
+    this.widgets = const [],
   });
 
   final List<List<HomeCell>> pages;
@@ -167,11 +161,16 @@ class HomeLayout {
   final List<FolderData> folders;
   final MemoryCardData memory;
 
+  /// Widgets placed on home pages (stage 3). The Caveat clock is seeded by
+  /// the controller so the hero zone stays the clock's own render.
+  final List<PlacedWidget> widgets;
+
   HomeLayout copyWith({
     List<List<HomeCell>>? pages,
     List<AppEntry>? dock,
     List<AppEntry>? recents,
     List<FolderData>? folders,
+    List<PlacedWidget>? widgets,
   }) {
     return HomeLayout(
       pages: pages ?? this.pages,
@@ -180,8 +179,13 @@ class HomeLayout {
       allApps: allApps,
       folders: folders ?? this.folders,
       memory: memory,
+      widgets: widgets ?? this.widgets,
     );
   }
+
+  /// Widgets living on one page, in stack order (top of page first).
+  List<PlacedWidget> widgetsOnPage(int page) =>
+      widgets.where((w) => w.page == page).toList();
 
   /// Current copy of a folder by id (pages and the folders list are patched
   /// together by the controller; read through here for the freshest state).
@@ -191,4 +195,40 @@ class HomeLayout {
     }
     return null;
   }
+}
+
+/// Widget kinds offered by the picker (screen 8).
+enum WidgetKind { clock, memories, calendar, sticky }
+
+/// One placed widget. Spans are in 4-column grid cells; heights in
+/// icon-row units (the honest edit-mode pitch).
+@immutable
+class PlacedWidget {
+  const PlacedWidget({
+    required this.id,
+    required this.kind,
+    required this.page,
+    required this.w,
+    required this.h,
+  });
+
+  final String id;
+  final WidgetKind kind;
+  final int page;
+  final int w;
+  final int h;
+
+  PlacedWidget copyWith({int? page, int? w, int? h}) => PlacedWidget(
+    id: id,
+    kind: kind,
+    page: page ?? this.page,
+    w: w ?? this.w,
+    h: h ?? this.h,
+  );
+
+  @override
+  bool operator ==(Object other) => other is PlacedWidget && other.id == id;
+
+  @override
+  int get hashCode => id.hashCode;
 }

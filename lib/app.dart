@@ -21,12 +21,17 @@ class ToadLauncherApp extends ConsumerWidget {
       title: 'toadLAUNCHER',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(useMaterial3: true, fontFamily: 'Inter'),
+      // The skin scope wraps the navigator so pushed pages (settings hub,
+      // wallpaper & style) and modal sheets share the same tokens.
+      builder: (context, child) =>
+          ToadThemeScope(child: child ?? const SizedBox.shrink()),
       home: _SkinGate(pondPro: settings.pondPro),
     );
   }
 }
 
-/// Edge-to-edge, then resolve skin + pick the home variant.
+/// Edge-to-edge, then pick the home variant (the skin scope comes from the
+/// app builder above).
 class _SkinGate extends StatelessWidget {
   const _SkinGate({required this.pondPro});
 
@@ -36,8 +41,6 @@ class _SkinGate extends StatelessWidget {
   Widget build(BuildContext context) {
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
 
-    return ToadThemeScope(
-      child: pondPro ? const PondHome() : const HomeScreen(),
-    );
+    return pondPro ? const PondHome() : const HomeScreen();
   }
 }

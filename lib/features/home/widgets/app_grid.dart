@@ -21,6 +21,7 @@ class AppGridPageView extends StatelessWidget {
     this.onAppLongPress,
     this.onFolderTap,
     this.onFolderLongPress,
+    this.buildPageHeader,
   });
 
   final List<List<HomeCell>> pages;
@@ -35,20 +36,33 @@ class AppGridPageView extends StatelessWidget {
   final void Function(FolderData folder, Rect iconRect)? onFolderTap;
   final void Function(FolderData folder, Offset anchor)? onFolderLongPress;
 
+  /// Stage 3: per-page widget zone rendered above the icon grid (the Caveat
+  /// clock lives here — widgets are per-page objects, exactly as the
+  /// proposal's edit mode shows them).
+  final Widget? Function(int pageIndex)? buildPageHeader;
+
   @override
   Widget build(BuildContext context) {
     return PageView.builder(
       controller: controller,
       itemCount: pages.length,
       itemBuilder: (context, index) {
-        return AppGridPage(
-          cells: pages[index],
-          columns: columns,
-          iconShape: iconShape,
-          onAppTap: onAppTap,
-          onAppLongPress: onAppLongPress,
-          onFolderTap: onFolderTap,
-          onFolderLongPress: onFolderLongPress,
+        final header = buildPageHeader?.call(index);
+        return Column(
+          children: [
+            ?header,
+            Expanded(
+              child: AppGridPage(
+                cells: pages[index],
+                columns: columns,
+                iconShape: iconShape,
+                onAppTap: onAppTap,
+                onAppLongPress: onAppLongPress,
+                onFolderTap: onFolderTap,
+                onFolderLongPress: onFolderLongPress,
+              ),
+            ),
+          ],
         );
       },
     );
@@ -91,27 +105,27 @@ class AppGridPage extends StatelessWidget {
         final cell = cells[index];
         return switch (cell) {
           AppCell() => _AppCell(
-              app: cell.app,
-              iconShape: iconShape,
-              labelColor: palette.ink,
-              haloColor: palette.labelHalo,
-              onTap: () => onAppTap(cell.app),
-              onLongPress: onAppLongPress == null
-                  ? null
-                  : (anchor) => onAppLongPress!(cell.app, anchor),
-            ),
+            app: cell.app,
+            iconShape: iconShape,
+            labelColor: palette.ink,
+            haloColor: palette.labelHalo,
+            onTap: () => onAppTap(cell.app),
+            onLongPress: onAppLongPress == null
+                ? null
+                : (anchor) => onAppLongPress!(cell.app, anchor),
+          ),
           FolderCell() => _FolderTile(
-              folder: cell.folder,
-              iconShape: iconShape,
-              labelColor: palette.ink,
-              haloColor: palette.labelHalo,
-              onTap: onFolderTap == null
-                  ? null
-                  : (rect) => onFolderTap!(cell.folder, rect),
-              onLongPress: onFolderLongPress == null
-                  ? null
-                  : (anchor) => onFolderLongPress!(cell.folder, anchor),
-            ),
+            folder: cell.folder,
+            iconShape: iconShape,
+            labelColor: palette.ink,
+            haloColor: palette.labelHalo,
+            onTap: onFolderTap == null
+                ? null
+                : (rect) => onFolderTap!(cell.folder, rect),
+            onLongPress: onFolderLongPress == null
+                ? null
+                : (anchor) => onFolderLongPress!(cell.folder, anchor),
+          ),
         };
       },
     );
@@ -178,18 +192,19 @@ class _FolderTile extends StatelessWidget {
     final palette = ToadTheme.of(context).palette;
 
     double effectiveRadius(double size) => switch (iconShape) {
-          IconShape.squircle => ToadRadii.iconTile,
-          IconShape.circle => size / 2,
-          IconShape.rounded => size * 0.38,
-        };
+      IconShape.squircle => ToadRadii.iconTile,
+      IconShape.circle => size / 2,
+      IconShape.rounded => size * 0.38,
+    };
 
     final preview = Container(
       width: ToadMetrics.gridIconSize,
       height: ToadMetrics.gridIconSize,
       decoration: BoxDecoration(
         color: palette.surface.withValues(alpha: palette.surface.a * 0.9),
-        borderRadius:
-            BorderRadius.circular(effectiveRadius(ToadMetrics.gridIconSize)),
+        borderRadius: BorderRadius.circular(
+          effectiveRadius(ToadMetrics.gridIconSize),
+        ),
         border: Border.all(
           color: palette.hairline.withValues(alpha: palette.hairline.a * 0.9),
         ),
@@ -209,8 +224,7 @@ class _FolderTile extends StatelessWidget {
           height: double.infinity,
           child: _MiniPreview(
             apps: folder.apps.take(4).toList(),
-            radius:
-                iconShape == IconShape.circle ? 99 : ToadRadii.inner * 0.5,
+            radius: iconShape == IconShape.circle ? 99 : ToadRadii.inner * 0.5,
           ),
         ),
       ),
@@ -262,8 +276,8 @@ class _MiniPreview extends StatelessWidget {
       if (app == null) return const SizedBox.shrink();
       final gradient = app.isFamilyToad
           ? AppIconGradients.toad
-          : AppIconGradients
-              .all[app.gradientIndex % AppIconGradients.all.length];
+          : AppIconGradients.all[app.gradientIndex %
+                AppIconGradients.all.length];
       return Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(radius),
@@ -294,9 +308,25 @@ class _MiniPreview extends StatelessWidget {
 
     return Column(
       children: [
-        Expanded(child: Row(children: [Expanded(child: slot(0)), const SizedBox(width: 2), Expanded(child: slot(1))])),
+        Expanded(
+          child: Row(
+            children: [
+              Expanded(child: slot(0)),
+              const SizedBox(width: 2),
+              Expanded(child: slot(1)),
+            ],
+          ),
+        ),
         const SizedBox(height: 2),
-        Expanded(child: Row(children: [Expanded(child: slot(2)), const SizedBox(width: 2), Expanded(child: slot(3))])),
+        Expanded(
+          child: Row(
+            children: [
+              Expanded(child: slot(2)),
+              const SizedBox(width: 2),
+              Expanded(child: slot(3)),
+            ],
+          ),
+        ),
       ],
     );
   }

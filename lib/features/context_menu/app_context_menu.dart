@@ -197,8 +197,10 @@ class _ContextMenuLayerState extends State<ContextMenuLayer>
     var top = widget.request.anchor.dy + 10;
     var alignTop = true;
     if (top + estHeight > size.height - 92) {
-      top = (widget.request.anchor.dy - estHeight - 10)
-          .clamp(12.0, double.infinity);
+      top = (widget.request.anchor.dy - estHeight - 10).clamp(
+        12.0,
+        double.infinity,
+      );
       alignTop = false;
     }
 
@@ -287,10 +289,7 @@ class _PopoverCard extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (confirmingUninstall) ...[
-              _ConfirmHeader(
-                appName: request.app!.name,
-                rowColor: rowColor,
-              ),
+              _ConfirmHeader(appName: request.app!.name, rowColor: rowColor),
               _PopoverRow(
                 icon: '🗑',
                 label: 'Yes, uninstall it',
@@ -315,8 +314,8 @@ class _PopoverCard extends StatelessWidget {
                   chipColor: item.danger
                       ? palette.danger.withValues(alpha: 0.14)
                       : (dark
-                          ? palette.accent.withValues(alpha: 0.14)
-                          : palette.accent.withValues(alpha: 0.12)),
+                            ? palette.accent.withValues(alpha: 0.14)
+                            : palette.accent.withValues(alpha: 0.12)),
                   chipInk: item.danger ? palette.danger : palette.accentInk,
                   // The danger row never fires directly — it arms the
                   // second-step confirm ("confirmed with a second step").

@@ -6,14 +6,43 @@ network permission at all**.
 
 Built from the approved UI/UX design proposal v1.1 (14 mockups, 4 themes).
 
-## Status — Stage 2 of 4 complete
+## Status — Stage 3 of 4 complete
 
 | Stage | Scope | State |
 |---|---|---|
 | 1 (M1) | Theme engine (4 skins), home screen, hero clock, memories card, app grid, page dots, dock, static Pond home | **done** |
 | 2 (M2a) | A–Z drawer + search + recents, folders (shared-axis open, inline rename), long-press menus with two-step uninstall | **done** |
-| 3 (M2b/M3) | Edit mode with honest snapping, widget picker, wallpaper & style, settings hub + gestures, motion polish | pending |
+| 3 (M2b/M3) | Edit mode with honest snapping, widget picker, wallpaper & style, settings hub + gestures | **done** |
 | 4 (M4) | Pond ambient loop (ripple/blink/croak/hop/flyby/fireflies/rain), mouth drawer, Calm-pond + battery guards | pending |
+
+## Stage 3 walkthrough (demo mode)
+
+- **Edit mode** (screen 7) — long-press → *Edit home screen*, or pinch-in.
+  Faint grid lines (12% ink) show the real 4-column cells; the selected
+  widget wears a dashed toad-green outline with four corner handles; pulling
+  a corner resizes between 2x1 and 4x4 and **the clock re-renders live at
+  every size** (persisted). The hint bubble teaches once, then never again
+  (persisted dismiss). Bottom strip: Wallpapers · Widgets · Settings; the
+  Done pill (or back) exits, and every action ends with an undoable toast.
+- **Widget picker** (screen 8) — bottom sheet with real mini-previews (the
+  same engines as the placed widgets, never stock images). toadGALLERY's
+  Memories strip is the featured first citizen; the Caveat clock, a real
+  month calendar (4x4, local only) and a Patrick Hand sticky note round out
+  the set. Placed kinds stay tappable and explain themselves calmly; picking
+  drops you straight into edit mode with the widget attached — drag it onto
+  home and it snaps into the page's widget stack.
+- **Wallpaper & style** (screen 9) — bundled sketchbook papers (user photos
+  arrive with device mode), Auto/Light/Dark/AMOLED segmented control, six
+  accent stickers with instant re-tint, squircle/circle/rounded icon shapes,
+  and the Pond Pro switch. Everything offline; papers ship inside the APK.
+- **Settings hub** (screen 10) — hub-plus-pages with honest subtitles that
+  compose themselves from live settings. The gestures sub-page mirrors the
+  mockup: swipe-up drawer, double-tap sleep, swipe-down shade, two-finger
+  screenshot (off — can clash with system shortcuts), pinch for edit mode,
+  dock-area swipe for search (off). Switches apply live, no save button.
+- **Gesture map** (screen 11) — tap icon launches; tap the clock opens
+  Clock; swipe up drawer; swipe down shade (demo says so honestly); pinch
+  edit mode; double-tap sleep demo; dock-area swipe opens search.
 
 ## Stage 2 walkthrough (demo mode)
 
@@ -35,7 +64,7 @@ Built from the approved UI/UX design proposal v1.1 (14 mockups, 4 themes).
 
 ```bash
 flutter analyze   # zero issues
-flutter test      # 47 tests
+flutter test      # 60 tests
 flutter run       # demo mode: the proposal's app set, no device needed
 ```
 

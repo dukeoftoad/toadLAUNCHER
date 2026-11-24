@@ -1,9 +1,11 @@
 /// Home screen — sketchbook skins (Light / Dark / AMOLED).
 ///
-/// Layout top→bottom: hero zone → memories card → paged app grid →
-/// page dots → dock. Stage 2 layers: swipe up (or the dock chevron) opens
-/// the A–Z drawer, folder tiles open their shared-axis card, long-presses
-/// raise the context menu — "always with an escape, never with a surprise".
+/// Layout per page: widget zone (Caveat clock + friends) → app grid →
+/// page dots → dock. Stage 3: edit mode (grid skeleton, dashed selection,
+/// resize handles, undoable actions), the widget picker with pick-to-place,
+/// the wallpaper underlay, and the full gesture map — swipe up (drawer),
+/// swipe down (shade demo), pinch (edit), double-tap (sleep demo),
+/// dock-area swipe (search).
 library;
 
 import 'package:flutter/services.dart' show SystemUiOverlayStyle;
@@ -14,22 +16,28 @@ import '../../core/models/models.dart';
 import '../../core/settings/launcher_settings.dart';
 import '../../core/theme/toad_theme.dart';
 import '../../core/theme/toad_tokens.dart';
+import '../../shared/widgets/placed_widgets.dart' show widgetZoneHeight;
+import '../../shared/widgets/sketchbook_wallpaper.dart';
 import '../../shared/widgets/toad_toast.dart';
 import '../../shared/widgets/wallpaper_glow.dart';
 import '../context_menu/app_context_menu.dart';
-import '../drawer/app_drawer.dart'
-    show AppDrawer, drawerMenuBridgeProvider;
+import '../drawer/app_drawer.dart' show AppDrawer, drawerMenuBridgeProvider;
+import '../edit/edit_mode.dart'
+    show EditBottomStrip, EditHintBubble, GridSkeletonPainter, WidgetZone;
 import '../folder/folder_overlay.dart'
     show
         FolderOverlay,
         OpenFolderRequest,
         openFolderProvider,
         openFolderMenuProvider;
+import '../settings/settings_hub.dart' show openSettingsHub;
+import '../wallpaper_style/wallpaper_style_screen.dart'
+    show WallpaperStyleScreen;
+import '../widget_picker/widget_picker_sheet.dart'
+    show PlacementGhost, showWidgetPicker;
 import 'home_controller.dart';
 import 'widgets/app_grid.dart';
 import 'widgets/dock_bar.dart';
-import 'widgets/hero_zone.dart';
-import 'widgets/memories_card.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -44,6 +52,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   /// Menu raised from the grid / dock / empty space (local to this host).
   MenuRequest? _menu;
+
+  /// Dock-area swipe opens the drawer with search focused.
+  bool _drawerWithSearch = false;
+
+  /// Pinch tracking via raw pointers — the scale recognizer loses the
+  /// arena to the page's horizontal drag, so pinch is measured directly
+  /// (distance between the two pointers shrinking past 25%).
+  final Map<int, Offset> _pointerPositions = {};
+  double? _pinchStartDistance;
+  bool _pinchFired = false;
+
+  /// Two-finger screenshot detection (opt-in switch).
+  final Set<int> _activePointers = {};
+  bool _twoFingerFired = false;
+
+  /// Page-area key — converts placement drops into stack slots.
+  final GlobalKey _pageAreaKey = GlobalKey();
 
   @override
   void initState() {
@@ -76,7 +101,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   bool get _overlayBusy =>
-      ref.read(drawerOpenProvider) || ref.read(openFolderProvider) != null;
+      ref.read(editModeProvider) ||
+      ref.read(drawerOpenProvider) ||
+      ref.read(openFolderProvider) != null;
 
   void _dismissMenu() {
     ref.read(drawerMenuBridgeProvider.notifier).consume();
@@ -85,13 +112,51 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   void _closeTopOverlay() {
-    if (_menu != null) {
+    if (ref.read(placementProvider) != null) {
+      ref.read(placementProvider.notifier).cancel();
+    } else if (_menu != null) {
       _dismissMenu();
     } else if (ref.read(openFolderProvider) != null) {
       ref.read(openFolderProvider.notifier).close();
     } else if (ref.read(drawerOpenProvider)) {
       ref.read(drawerOpenProvider.notifier).close();
+    } else if (ref.read(editModeProvider)) {
+      ref.read(editModeProvider.notifier).exit();
     }
+  }
+
+  void _openDrawer({bool withSearch = false}) {
+    setState(() => _drawerWithSearch = withSearch);
+    ref.read(drawerOpenProvider.notifier).open();
+  }
+
+  void _enterEdit() {
+    _dismissMenu();
+    ref.read(editModeProvider.notifier).enter();
+  }
+
+  void _openWallpaperStyle() {
+    _dismissMenu();
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const WallpaperStyleScreen()),
+    );
+  }
+
+  void _openSettings() {
+    _dismissMenu();
+    openSettingsHub(context);
+  }
+
+  void _openWidgets() {
+    _dismissMenu();
+    showWidgetPicker(context);
+  }
+
+  /// Gesture map: "Tap — clock area of hero — open Clock app".
+  void _openClockApp() {
+    final layout = ref.read(homeLayoutProvider).valueOrNull;
+    final clock = layout?.allApps.where((a) => a.id == 'clock').firstOrNull;
+    if (clock != null) _launch(clock);
   }
 
   /// Locate a cell by id across the pages (folders included).
@@ -112,18 +177,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   void _openFolder(FolderData folder, Rect iconRect) {
-    ref.read(openFolderProvider.notifier).open(
-          OpenFolderRequest(folder: folder, originRect: iconRect),
-        );
+    ref
+        .read(openFolderProvider.notifier)
+        .open(OpenFolderRequest(folder: folder, originRect: iconRect));
   }
 
-  void _openFolderAtAnchor(FolderData folder, Offset anchor,
-      {bool startInRename = false}) {
-    ref.read(openFolderProvider.notifier).open(
+  void _openFolderAtAnchor(
+    FolderData folder,
+    Offset anchor, {
+    bool startInRename = false,
+  }) {
+    ref
+        .read(openFolderProvider.notifier)
+        .open(
           OpenFolderRequest(
             folder: folder,
-            originRect:
-                Rect.fromCircle(center: anchor, radius: ToadRadii.iconTile),
+            originRect: Rect.fromCircle(
+              center: anchor,
+              radius: ToadRadii.iconTile,
+            ),
             startInRename: startInRename,
           ),
         );
@@ -181,10 +253,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         _dismissMenu();
         _toast('App info is a device feature — demo stays offline');
       },
-      onWidgets: () {
-        _dismissMenu();
-        _toast('Widget picker arrives in stage 3');
-      },
+      onWidgets: _openWidgets,
       onShare: () {
         _dismissMenu();
         _toast('Share is a device feature — demo stays offline');
@@ -193,13 +262,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         _dismissMenu();
         _toast('Uninstall needs a real device — demo keeps everything');
       },
-      onEditHome: variant == MenuContext.homeApp
-          ? () {
-              _dismissMenu();
-              _toast('Edit mode arrives in stage 3');
-            }
+      onEditHome:
+          variant == MenuContext.homeApp || variant == MenuContext.dockApp
+          ? _enterEdit
           : null,
-      onRemove: variant == MenuContext.homeApp ||
+      onRemove:
+          variant == MenuContext.homeApp ||
               variant == MenuContext.dockApp ||
               variant == MenuContext.folderTile ||
               variant == MenuContext.folderApp
@@ -233,15 +301,134 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               if (anchor != null) _openFolderAtAnchor(folder, anchor);
             }
           : null,
-      onWallpaper: () {
-        _dismissMenu();
-        _toast('Wallpaper & style arrive in stage 3');
-      },
-      onHomeSettings: () {
-        _dismissMenu();
-        _toast('Home settings arrive in stage 3');
-      },
+      onWallpaper: _openWallpaperStyle,
+      onHomeSettings: _openSettings,
     );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Gesture map (screen 11)
+  // ---------------------------------------------------------------------------
+
+  void _onScaleEnd(ScaleEndDetails details) {
+    if (_overlayBusy) return;
+
+    final settings = ref.read(launcherSettingsProvider);
+    final v = details.velocity.pixelsPerSecond;
+    final vertical = v.dy.abs() > v.dx.abs();
+    if (!vertical) return;
+
+    if (v.dy < -320) {
+      // Swipe up → drawer.
+      if (settings.swipeUpDrawer) _openDrawer();
+    } else if (v.dy > 320) {
+      // Swipe down → pull the notification shade (demo stays honest).
+      if (settings.swipeDownNotifications) {
+        _toast(
+          'The notification shade is a system surface — the demo '
+          'stays inside',
+        );
+      }
+    }
+  }
+
+  /// Opt-in double-tap sleep — honest in demo: no write-settings here.
+  void _onDoubleTap() {
+    if (_overlayBusy) return;
+    final settings = ref.read(launcherSettingsProvider);
+    if (settings.doubleTapSleep) {
+      _toast(
+        'Double-tap sleep needs the write-settings permission — '
+        'the demo keeps the paper lit',
+      );
+    }
+  }
+
+  void _onPointerDown(PointerDownEvent event) {
+    _activePointers.add(event.pointer);
+    _pointerPositions[event.pointer] = event.position;
+
+    if (_activePointers.length == 2 && !_twoFingerFired) {
+      final settings = ref.read(launcherSettingsProvider);
+      if (settings.twoFingerScreenshot && !_overlayBusy) {
+        _twoFingerFired = true;
+        _toast(
+          'Two-finger screenshot needs a real device — the demo keeps '
+          'your pixels',
+        );
+      }
+    }
+    if (_activePointers.length == 2) {
+      final pts = _pointerPositions.values.toList();
+      _pinchStartDistance = (pts[0] - pts[1]).distance;
+      _pinchFired = false;
+    }
+  }
+
+  void _onPointerMove(PointerMoveEvent event) {
+    if (!_pointerPositions.containsKey(event.pointer)) return;
+    _pointerPositions[event.pointer] = event.position;
+
+    // Pinch in → edit mode: the two-pointer distance shrinks past 25%.
+    if (_activePointers.length >= 2 &&
+        !_pinchFired &&
+        _pinchStartDistance != null &&
+        _pinchStartDistance! > 0) {
+      final pts = _pointerPositions.values.toList();
+      final d = (pts[0] - pts[1]).distance;
+      if (d < _pinchStartDistance! * 0.75) {
+        _pinchFired = true;
+        final settings = ref.read(launcherSettingsProvider);
+        if (settings.pinchEditMode && !_overlayBusy) _enterEdit();
+      }
+    }
+  }
+
+  void _onPointerUp(PointerEvent event) {
+    _activePointers.remove(event.pointer);
+    _pointerPositions.remove(event.pointer);
+    if (_activePointers.length < 2) {
+      _pinchStartDistance = null;
+      _pinchFired = false;
+    }
+    if (_activePointers.isEmpty) _twoFingerFired = false;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Pick-to-place
+  // ---------------------------------------------------------------------------
+
+  void _placeDropped(DragTargetDetails<WidgetKind> details) {
+    final box = _pageAreaKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null) return;
+    final local = box.globalToLocal(details.offset);
+    final kind = details.data;
+
+    final page = ref.read(currentPageProvider);
+    final layout = ref.read(homeLayoutProvider).valueOrNull;
+
+    // Snap to the nearest stack slot (honest: no invisible offsets).
+    var index = 0;
+    var acc = 0.0;
+    for (final w in layout?.widgetsOnPage(page) ?? const <PlacedWidget>[]) {
+      final h = widgetZoneHeight(w.h);
+      if (local.dy > acc + h / 2) {
+        index++;
+        acc += h + 8;
+      } else {
+        break;
+      }
+    }
+
+    final placed = ref
+        .read(homeLayoutProvider.notifier)
+        .placeWidget(kind, page: page, index: index);
+    ref.read(placementProvider.notifier).cancel();
+    if (placed) {
+      ref
+          .read(toastProvider.notifier)
+          .showUndoable('Placed on page ${page + 1} — drag its body to move');
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -251,12 +438,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final skin = ToadTheme.of(context);
+    final palette = skin.palette;
     final settings = ref.watch(launcherSettingsProvider);
-    final now = ref.watch(clockProvider).value ?? DateTime.now();
     final layoutAsync = ref.watch(homeLayoutProvider);
 
     final drawerOpen = ref.watch(drawerOpenProvider);
     final folderRequest = ref.watch(openFolderProvider);
+    final editMode = ref.watch(editModeProvider);
     final drawerMenu = ref.watch(drawerMenuBridgeProvider);
     final folderMenu = ref.watch(openFolderMenuProvider);
 
@@ -288,13 +476,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       );
     }
 
-    final hero = buildHeroData(now, pond: false, pondNight: false);
-
-    ref.listen<String?>(toastProvider, (prev, message) {
-      if (message == null || message == prev) return;
+    ref.listen<ToastEvent?>(toastProvider, (prev, event) {
+      if (event == null || identical(event, prev)) return;
       ScaffoldMessenger.of(context)
         ..clearSnackBars()
-        ..showSnackBar(toadToast(context, message));
+        ..showSnackBar(
+          toadToast(
+            context,
+            event,
+            onUndo: () => ref.read(homeLayoutProvider.notifier).undo(),
+          ),
+        );
       ref.read(toastProvider.notifier).consume();
     });
 
@@ -302,9 +494,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
-        if (_menu != null ||
+        if (ref.read(placementProvider) != null ||
+            _menu != null ||
             folderRequest != null ||
-            ref.read(drawerOpenProvider)) {
+            ref.read(drawerOpenProvider) ||
+            editMode) {
           _closeTopOverlay();
         }
       },
@@ -316,104 +510,139 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           systemNavigationBarIconBrightness: skin.palette.statusIconBrightness,
         ),
         child: Scaffold(
-          backgroundColor: skin.palette.paper,
+          backgroundColor: palette.paper,
           body: Stack(
             children: [
               // ---- Base home ----
-              WallpaperGlow(
-                child: GestureDetector(
-                  // "Swipe up anywhere on the home opens the drawer."
-                  onVerticalDragEnd: (details) {
-                    final v = details.primaryVelocity ?? 0;
-                    if (settings.swipeUpDrawer && v < -320 && !_overlayBusy) {
-                      ref.read(drawerOpenProvider.notifier).open();
-                    }
-                  },
-                  // Long-press on empty space → the smaller menu.
-                  onLongPressStart: _overlayBusy
-                      ? null
-                      : (details) => _showMenu(
-                            MenuContext.emptySpace,
-                            anchor: details.globalPosition,
-                          ),
-                  child: SafeArea(
-                    bottom: false,
-                    child: Column(
-                      children: [
-                        HeroZone(data: hero),
-                        if (settings.showMemoriesCard)
-                          layoutAsync.maybeWhen(
-                            data: (layout) => MemoriesCard(
-                              data: layout.memory,
-                              onOpen: () => _launch(
-                                layout.allApps.firstWhere(
-                                  (a) => a.id == 'family.toad.gallery',
-                                  orElse: () => layout.allApps.first,
+              WallpaperIndexScope(
+                index: settings.wallpaperIndex,
+                child: SketchbookWallpaper(
+                  child: WallpaperGlow(
+                    child: Listener(
+                      onPointerDown: _onPointerDown,
+                      onPointerMove: _onPointerMove,
+                      onPointerUp: _onPointerUp,
+                      onPointerCancel: _onPointerUp,
+                      child: GestureDetector(
+                        // Vertical flings (drawer / shade); pinch is
+                        // raw-pointer based; long-press on empty space
+                        // raises the smaller menu.
+                        onScaleEnd: _onScaleEnd,
+                        onDoubleTap: _onDoubleTap,
+                        onLongPressStart: _overlayBusy
+                            ? null
+                            : (details) => _showMenu(
+                                MenuContext.emptySpace,
+                                anchor: details.globalPosition,
+                              ),
+                        child: SafeArea(
+                          bottom: false,
+                          child: Column(
+                            children: [
+                              Expanded(
+                                child: layoutAsync.maybeWhen(
+                                  data: (layout) {
+                                    if (_pageCount != layout.pages.length) {
+                                      _pageCount = layout.pages.length;
+                                    }
+                                    // Edit mode paints the honest grid
+                                    // skeleton over the page area.
+                                    return CustomPaint(
+                                      key: _pageAreaKey,
+                                      foregroundPainter: editMode
+                                          ? GridSkeletonPainter(
+                                              color: palette.ink,
+                                            )
+                                          : null,
+                                      child: DragTarget<WidgetKind>(
+                                        onWillAcceptWithDetails: (details) =>
+                                            editMode,
+                                        onAcceptWithDetails: (details) =>
+                                            _placeDropped(details),
+                                        builder: (context, _, _) =>
+                                            AppGridPageView(
+                                              pages: layout.pages,
+                                              controller: _pageController,
+                                              columns: settings.gridColumns,
+                                              iconShape: settings.iconShape,
+                                              onAppTap: _launch,
+                                              onAppLongPress: (app, anchor) =>
+                                                  _showMenu(
+                                                    MenuContext.homeApp,
+                                                    anchor: anchor,
+                                                    app: app,
+                                                  ),
+                                              onFolderTap: _openFolder,
+                                              onFolderLongPress:
+                                                  (folder, anchor) => _showMenu(
+                                                    MenuContext.folderTile,
+                                                    anchor: anchor,
+                                                    folder: folder,
+                                                  ),
+                                              buildPageHeader: (pageIndex) =>
+                                                  WidgetZone(
+                                                    pageIndex: pageIndex,
+                                                    memory: layout.memory,
+                                                    onClockTap: _openClockApp,
+                                                  ),
+                                            ),
+                                      ),
+                                    );
+                                  },
+                                  orElse: () => const SizedBox.shrink(),
                                 ),
                               ),
-                            ),
-                            orElse: () => const SizedBox(
-                              height: 118,
-                              width: double.infinity,
-                            ),
-                          ),
-                        Expanded(
-                          child: layoutAsync.maybeWhen(
-                            data: (layout) {
-                              if (_pageCount != layout.pages.length) {
-                                _pageCount = layout.pages.length;
-                              }
-                              return AppGridPageView(
-                                pages: layout.pages,
-                                controller: _pageController,
-                                columns: settings.gridColumns,
-                                iconShape: settings.iconShape,
-                                onAppTap: _launch,
-                                onAppLongPress: (app, anchor) => _showMenu(
-                                  MenuContext.homeApp,
-                                  anchor: anchor,
-                                  app: app,
-                                ),
-                                onFolderTap: _openFolder,
-                                onFolderLongPress: (folder, anchor) =>
-                                    _showMenu(
-                                  MenuContext.folderTile,
-                                  anchor: anchor,
-                                  folder: folder,
-                                ),
-                              );
-                            },
-                            orElse: () => const SizedBox.shrink(),
+                              PageDots(
+                                count: _pageCount,
+                                activeIndex: ref.watch(currentPageProvider),
+                              ),
+                              if (editMode) const EditHintBubble(),
+                              layoutAsync.maybeWhen(
+                                data: (layout) => editMode
+                                    ? EditBottomStrip(
+                                        onWallpapers: _openWallpaperStyle,
+                                        onWidgets: _openWidgets,
+                                        onSettings: _openSettings,
+                                        onDone: () => ref
+                                            .read(editModeProvider.notifier)
+                                            .exit(),
+                                      )
+                                    : DockBar(
+                                        apps: layout.dock,
+                                        iconShape: settings.iconShape,
+                                        onAppTap: _launch,
+                                        onDrawerTap: () => _openDrawer(),
+                                        onSwipeDown: () {
+                                          final s = ref.read(
+                                            launcherSettingsProvider,
+                                          );
+                                          if (s.dockAreaSwipeSearch &&
+                                              !_overlayBusy) {
+                                            _openDrawer(withSearch: true);
+                                          }
+                                        },
+                                        onAppLongPress: (app) {
+                                          final box =
+                                              context.findRenderObject()!
+                                                  as RenderBox;
+                                          final dockCenter = Offset(
+                                            box.size.width / 2,
+                                            box.size.height - 42,
+                                          );
+                                          _showMenu(
+                                            MenuContext.dockApp,
+                                            anchor: dockCenter,
+                                            app: app,
+                                          );
+                                        },
+                                      ),
+                                orElse: () =>
+                                    SizedBox(height: editMode ? 78 : 84),
+                              ),
+                            ],
                           ),
                         ),
-                        PageDots(
-                          count: _pageCount,
-                          activeIndex: ref.watch(currentPageProvider),
-                        ),
-                        layoutAsync.maybeWhen(
-                          data: (layout) => DockBar(
-                            apps: layout.dock,
-                            iconShape: settings.iconShape,
-                            onAppTap: _launch,
-                            onDrawerTap: () =>
-                                ref.read(drawerOpenProvider.notifier).open(),
-                            onAppLongPress: (app) {
-                              final box = context.findRenderObject()!
-                                  as RenderBox;
-                              final dockCenter = Offset(
-                                box.size.width / 2,
-                                box.size.height - 42,
-                              );
-                              _showMenu(
-                                MenuContext.dockApp,
-                                anchor: dockCenter,
-                                app: app,
-                              );
-                            },
-                          ),
-                          orElse: () => const SizedBox(height: 84),
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
@@ -422,21 +651,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               // ---- Folder (screen 5) ----
               if (folderRequest != null)
                 FolderOverlay(
-                  folder: layout?.folderById(folderRequest.folder.id) ??
+                  folder:
+                      layout?.folderById(folderRequest.folder.id) ??
                       folderRequest.folder,
                   originRect: folderRequest.originRect,
                   startInRename: folderRequest.startInRename,
                 ),
 
               // ---- Drawer (screen 4) ----
-              if (drawerOpen) const AppDrawer(),
+              if (drawerOpen) AppDrawer(startWithSearch: _drawerWithSearch),
+
+              // ---- Pick-to-place ghost (screen 8) ----
+              const PlacementGhost(),
 
               // ---- Context menu (screen 6) — topmost ----
               if (_menu != null)
-                ContextMenuLayer(
-                  request: _menu!,
-                  onDismissed: _dismissMenu,
-                )
+                ContextMenuLayer(request: _menu!, onDismissed: _dismissMenu)
               else if (bridgeMenu != null)
                 ContextMenuLayer(
                   request: bridgeMenu,
@@ -449,4 +679,3 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 }
-

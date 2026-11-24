@@ -30,17 +30,27 @@ class PondScenePainter extends CustomPainter {
   ];
 
   static const _ripplesDay = [
-    (100.0, 560.0), (250.0, 600.0), (320.0, 545.0), (70.0, 635.0),
+    (100.0, 560.0),
+    (250.0, 600.0),
+    (320.0, 545.0),
+    (70.0, 635.0),
   ];
   static const _ripplesNight = [(100.0, 560.0), (250.0, 600.0)];
   static const _bubbles = [(180.0, 615.0), (300.0, 630.0)];
   static const _stars = [
-    (150.0, 52.0), (250.0, 96.0), (300.0, 70.0),
-    (60.0, 120.0), (210.0, 150.0), (250.0, 44.0),
+    (150.0, 52.0),
+    (250.0, 96.0),
+    (300.0, 70.0),
+    (60.0, 120.0),
+    (210.0, 150.0),
+    (250.0, 44.0),
   ];
   static const _fireflies = [
-    (80.0, 430.0), (300.0, 470.0), (240.0, 380.0),
-    (130.0, 520.0), (340.0, 410.0),
+    (80.0, 430.0),
+    (300.0, 470.0),
+    (240.0, 380.0),
+    (130.0, 520.0),
+    (340.0, 410.0),
   ];
 
   @override
@@ -111,14 +121,12 @@ class PondScenePainter extends CustomPainter {
       canvas.drawCircle(
         Offset(273 * kx, 47 * ky),
         4 * k,
-        Paint()
-          ..color = (p.moonCrater ?? Colors.grey).withValues(alpha: 0.55),
+        Paint()..color = (p.moonCrater ?? Colors.grey).withValues(alpha: 0.55),
       );
       canvas.drawCircle(
         Offset(288 * kx, 60 * ky),
         3 * k,
-        Paint()
-          ..color = (p.moonCrater ?? Colors.grey).withValues(alpha: 0.40),
+        Paint()..color = (p.moonCrater ?? Colors.grey).withValues(alpha: 0.40),
       );
 
       // Stars.
@@ -298,9 +306,12 @@ class PondScenePainter extends CustomPainter {
     if (nums.length >= 8) {
       path.moveTo(sx(nums[0]), sy(nums[1]));
       path.cubicTo(
-        sx(nums[2]), sy(nums[3]),
-        sx(nums[4]), sy(nums[5]),
-        sx(nums[6]), sy(nums[7]),
+        sx(nums[2]),
+        sy(nums[3]),
+        sx(nums[4]),
+        sy(nums[5]),
+        sx(nums[6]),
+        sy(nums[7]),
       );
     }
     return path;

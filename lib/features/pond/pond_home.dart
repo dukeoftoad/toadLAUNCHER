@@ -73,9 +73,14 @@ class _PondHomeState extends ConsumerState<PondHome> {
         anchor: anchor,
         app: app,
         actions: MenuActions(
-          onAppInfo: () => toast('App info is a device feature — demo stays offline'),
-          onWidgets: () => toast('Widget picker arrives in stage 3'),
-          onShare: () => toast('Share is a device feature — demo stays offline'),
+          onAppInfo: () =>
+              toast('App info is a device feature — demo stays offline'),
+          onWidgets: () => toast(
+            'Widgets are placed from the sketchbook skins — the pond hosts '
+            'them with its ambient loop',
+          ),
+          onShare: () =>
+              toast('Share is a device feature — demo stays offline'),
           onUninstall: () =>
               toast('Uninstall needs a real device — demo keeps everything'),
         ),
@@ -103,11 +108,11 @@ class _PondHomeState extends ConsumerState<PondHome> {
 
     final hero = buildHeroData(now, pond: true, pondNight: pond.isNight);
 
-    ref.listen<String?>(toastProvider, (prev, message) {
-      if (message == null || message == prev) return;
+    ref.listen<ToastEvent?>(toastProvider, (prev, event) {
+      if (event == null || identical(event, prev)) return;
       ScaffoldMessenger.of(context)
         ..clearSnackBars()
-        ..showSnackBar(toadToast(context, message));
+        ..showSnackBar(toadToast(context, event));
       ref.read(toastProvider.notifier).consume();
     });
 
@@ -120,11 +125,13 @@ class _PondHomeState extends ConsumerState<PondHome> {
       child: AnnotatedRegion<SystemUiOverlayStyle>(
         value: SystemUiOverlayStyle(
           statusBarColor: Colors.transparent,
-          statusBarIconBrightness:
-              pond.isNight ? Brightness.light : Brightness.dark,
+          statusBarIconBrightness: pond.isNight
+              ? Brightness.light
+              : Brightness.dark,
           systemNavigationBarColor: Colors.transparent,
-          systemNavigationBarIconBrightness:
-              pond.isNight ? Brightness.light : Brightness.dark,
+          systemNavigationBarIconBrightness: pond.isNight
+              ? Brightness.light
+              : Brightness.dark,
         ),
         child: Scaffold(
           backgroundColor: Colors.transparent,
@@ -176,10 +183,7 @@ class _PondHomeState extends ConsumerState<PondHome> {
                                   final apps = pageIndex == 0
                                       ? rows
                                       : _chunk(
-                                          _flatPondApps(
-                                            layout,
-                                            pageIndex,
-                                          ),
+                                          _flatPondApps(layout, pageIndex),
                                           3,
                                         );
                                   return _PondRows(
@@ -439,10 +443,8 @@ class _ResidentPadCell extends StatelessWidget {
     );
   }
 
-  Widget _z(double size) => Text(
-        'z',
-        style: ToadType.caveat(size, color: pond.zzz ?? pond.appLabel),
-      );
+  Widget _z(double size) =>
+      Text('z', style: ToadType.caveat(size, color: pond.zzz ?? pond.appLabel));
 }
 
 class _ClockReflection extends StatelessWidget {
@@ -559,8 +561,8 @@ class _LogDock extends StatelessWidget {
                             9,
                             weight: 500,
                             tracking: 0.72,
-                            color:
-                                const Color(0xFFF3E9D2).withValues(alpha: 0.7),
+                            color: const Color(0xFFF3E9D2)
+                                .withValues(alpha: 0.7),
                           ),
                         ),
                       ],

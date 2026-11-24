@@ -19,6 +19,7 @@ class DockBar extends StatelessWidget {
     required this.onAppTap,
     required this.onDrawerTap,
     this.onAppLongPress,
+    this.onSwipeDown,
     this.frostColor,
     this.borderColors,
     this.arrowColor,
@@ -30,6 +31,10 @@ class DockBar extends StatelessWidget {
   final VoidCallback onDrawerTap;
   final void Function(AppEntry app)? onAppLongPress;
 
+  /// "Swipe down in dock area — opens search instead of notifications"
+  /// (opt-in switch). Fires on a downward fling across the dock.
+  final VoidCallback? onSwipeDown;
+
   /// Pond variant overrides (log dock handles its own look).
   final Color? frostColor;
   final Color? borderColors;
@@ -39,52 +44,61 @@ class DockBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = ToadTheme.of(context).palette;
 
-    return Container(
-      margin: ToadMetrics.dockMargin,
-      padding: ToadMetrics.dockPadding,
-      decoration: BoxDecoration(
-        color: frostColor ??
-            palette.surface.withValues(alpha: palette.surface.a * 0.72),
-        borderRadius: BorderRadius.circular(ToadRadii.dock),
-        border: Border.all(
-          color: borderColors ??
-              palette.hairline.withValues(alpha: palette.hairline.a * 0.8),
+    return GestureDetector(
+      onVerticalDragEnd: onSwipeDown == null
+          ? null
+          : (details) {
+              if ((details.primaryVelocity ?? 0) > 320) onSwipeDown!();
+            },
+      child: Container(
+        margin: ToadMetrics.dockMargin,
+        padding: ToadMetrics.dockPadding,
+        decoration: BoxDecoration(
+          color:
+              frostColor ??
+              palette.surface.withValues(alpha: palette.surface.a * 0.72),
+          borderRadius: BorderRadius.circular(ToadRadii.dock),
+          border: Border.all(
+            color:
+                borderColors ??
+                palette.hairline.withValues(alpha: palette.hairline.a * 0.8),
+          ),
         ),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(ToadRadii.dock),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-          child: Row(
-            children: [
-              for (var i = 0; i < apps.take(4).length; i++)
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(ToadRadii.dock),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+            child: Row(
+              children: [
+                for (var i = 0; i < apps.take(4).length; i++)
+                  Expanded(
+                    child: Center(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => onAppTap(apps[i]),
+                        onLongPress: onAppLongPress == null
+                            ? null
+                            : () => onAppLongPress!(apps[i]),
+                        child: ToadAppIcon(
+                          app: apps[i],
+                          size: ToadMetrics.dockIconSize,
+                          shape: iconShape,
+                          glyphSize: 21,
+                        ),
+                      ),
+                    ),
+                  ),
                 Expanded(
                   child: Center(
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
-                      onTap: () => onAppTap(apps[i]),
-                      onLongPress: onAppLongPress == null
-                          ? null
-                          : () => onAppLongPress!(apps[i]),
-                      child: ToadAppIcon(
-                        app: apps[i],
-                        size: ToadMetrics.dockIconSize,
-                        shape: iconShape,
-                        glyphSize: 21,
-                      ),
+                      onTap: onDrawerTap,
+                      child: _DrawerArrow(color: arrowColor ?? palette.ink),
                     ),
                   ),
                 ),
-              Expanded(
-                child: Center(
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: onDrawerTap,
-                    child: _DrawerArrow(color: arrowColor ?? palette.ink),
-                  ),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -105,7 +119,9 @@ class _DrawerArrow extends StatelessWidget {
         Text(
           '⌃',
           style: ToadType.hand(
-              13, color: color.withValues(alpha: color.a * 0.75)),
+            13,
+            color: color.withValues(alpha: color.a * 0.75),
+          ),
         ),
         const SizedBox(height: 2),
         Text(

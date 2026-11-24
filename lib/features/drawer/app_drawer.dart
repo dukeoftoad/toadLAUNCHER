@@ -14,13 +14,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/models/models.dart';
+import '../../core/settings/launcher_settings.dart';
 import '../../core/theme/toad_theme.dart';
 import '../../core/theme/toad_tokens.dart';
 import '../../shared/widgets/toad_app_icon.dart';
 import '../home/home_controller.dart';
 
 class AppDrawer extends ConsumerStatefulWidget {
-  const AppDrawer({super.key});
+  const AppDrawer({super.key, this.startWithSearch = false});
+
+  /// Dock-area swipe-down opens the drawer with search focused instead of
+  /// the notification shade (opt-in switch).
+  final bool startWithSearch;
 
   @override
   ConsumerState<AppDrawer> createState() => _AppDrawerState();
@@ -30,6 +35,7 @@ class _AppDrawerState extends ConsumerState<AppDrawer>
     with SingleTickerProviderStateMixin {
   late final AnimationController _entrance;
   final TextEditingController _search = TextEditingController();
+  final FocusNode _searchFocus = FocusNode();
   String _query = '';
 
   @override
@@ -42,12 +48,18 @@ class _AppDrawerState extends ConsumerState<AppDrawer>
     _search.addListener(() {
       if (_query != _search.text) setState(() => _query = _search.text);
     });
+    if (widget.startWithSearch) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _searchFocus.requestFocus();
+      });
+    }
   }
 
   @override
   void dispose() {
     _entrance.dispose();
     _search.dispose();
+    _searchFocus.dispose();
     super.dispose();
   }
 
@@ -72,6 +84,8 @@ class _AppDrawerState extends ConsumerState<AppDrawer>
     final layout = layoutAsync.valueOrNull;
     if (layout == null) return const SizedBox.shrink();
 
+    final settings = ref.watch(launcherSettingsProvider);
+
     // Exact drawer-wash values per skin (CSS .drawer-bg).
     final double washAlpha = switch (skin.skin) {
       ResolvedSkin.light => 0.82,
@@ -81,8 +95,9 @@ class _AppDrawerState extends ConsumerState<AppDrawer>
       ResolvedSkin.amoled => 0.88,
     };
     final rowColor = skin.isDark ? const Color(0xFFE8E2D4) : palette.ink;
-    final hintColor =
-        skin.isDark ? const Color(0xFFA39C8D) : const Color(0xFF6F6A5E);
+    final hintColor = skin.isDark
+        ? const Color(0xFFA39C8D)
+        : const Color(0xFF6F6A5E);
 
     return PopScope(
       canPop: false,
@@ -97,18 +112,23 @@ class _AppDrawerState extends ConsumerState<AppDrawer>
           child: FadeTransition(
             opacity: _entrance,
             child: SlideTransition(
-              position: Tween<Offset>(
-                begin: const Offset(0, 0.06),
-                end: Offset.zero,
-              ).animate(
-                CurvedAnimation(parent: _entrance, curve: Curves.easeOutCubic),
-              ),
+              position:
+                  Tween<Offset>(
+                    begin: const Offset(0, 0.06),
+                    end: Offset.zero,
+                  ).animate(
+                    CurvedAnimation(
+                      parent: _entrance,
+                      curve: Curves.easeOutCubic,
+                    ),
+                  ),
               child: ClipRect(
                 child: BackdropFilter(
                   filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
                   child: Container(
-                    color: palette.paper
-                        .withValues(alpha: palette.paper.a * washAlpha),
+                    color: palette.paper.withValues(
+                      alpha: palette.paper.a * washAlpha,
+                    ),
                     child: SafeArea(
                       bottom: false,
                       child: _DrawerHooks(
@@ -118,10 +138,15 @@ class _AppDrawerState extends ConsumerState<AppDrawer>
                               .read(drawerMenuBridgeProvider.notifier)
                               .raise(app: app, anchor: anchor);
                         },
+                        showBadges: settings.badges,
                         child: _Body(
                           layout: layout,
                           query: _query,
                           searchController: _search,
+                          searchFocus: _searchFocus,
+                          showSearch: settings.drawerSearch,
+                          showRecents: settings.drawerRecents,
+                          showBadges: settings.badges,
                           rowColor: rowColor,
                           hintColor: hintColor,
                           onClose: _close,
@@ -142,10 +167,10 @@ class _AppDrawerState extends ConsumerState<AppDrawer>
 /// Bridge so drawer rows can raise the host's context menu without
 /// threading callbacks through every widget.
 final StateNotifierProvider<DrawerMenuBridge, DrawerMenuRequest?>
-    drawerMenuBridgeProvider =
+drawerMenuBridgeProvider =
     StateNotifierProvider<DrawerMenuBridge, DrawerMenuRequest?>(
-  (ref) => DrawerMenuBridge(),
-);
+      (ref) => DrawerMenuBridge(),
+    );
 
 @immutable
 class DrawerMenuRequest {
@@ -171,6 +196,10 @@ class _Body extends StatelessWidget {
     required this.layout,
     required this.query,
     required this.searchController,
+    required this.searchFocus,
+    required this.showSearch,
+    required this.showRecents,
+    required this.showBadges,
     required this.rowColor,
     required this.hintColor,
     required this.onClose,
@@ -179,11 +208,15 @@ class _Body extends StatelessWidget {
   final HomeLayout layout;
   final String query;
   final TextEditingController searchController;
+  final FocusNode searchFocus;
+  final bool showSearch;
+  final bool showRecents;
+  final bool showBadges;
   final Color rowColor;
   final Color hintColor;
   final VoidCallback onClose;
 
-  bool get _searching => query.trim().isNotEmpty;
+  bool get _searching => showSearch && query.trim().isNotEmpty;
 
   @override
   Widget build(BuildContext context) {
@@ -199,11 +232,16 @@ class _Body extends StatelessWidget {
           },
           child: Column(
             children: [
-              _SearchPill(controller: searchController, hintColor: hintColor),
-              if (!_searching) ...[
-                const SizedBox(height: 12),
-                _RecentsRow(recents: layout.recents),
+              if (showSearch) ...[
+                _SearchPill(
+                  controller: searchController,
+                  focusNode: searchFocus,
+                  hintColor: hintColor,
+                ),
+                if (showRecents && !_searching) const SizedBox(height: 12),
               ],
+              if (showRecents && !_searching)
+                _RecentsRow(recents: layout.recents),
             ],
           ),
         ),
@@ -211,7 +249,7 @@ class _Body extends StatelessWidget {
         Expanded(
           child: _searching
               ? _SearchResults(query: query, apps: layout.allApps)
-              : _AzIndex(apps: layout.allApps),
+              : _AzIndex(apps: layout.allApps, showBadges: showBadges),
         ),
         const PageDotsMini(),
         const SizedBox(height: 14),
@@ -222,9 +260,14 @@ class _Body extends StatelessWidget {
 
 /// ⌕ Search apps — sticky pill, Patrick Hand 15.
 class _SearchPill extends StatelessWidget {
-  const _SearchPill({required this.controller, required this.hintColor});
+  const _SearchPill({
+    required this.controller,
+    required this.focusNode,
+    required this.hintColor,
+  });
 
   final TextEditingController controller;
+  final FocusNode focusNode;
   final Color hintColor;
 
   @override
@@ -247,6 +290,7 @@ class _SearchPill extends StatelessWidget {
             Expanded(
               child: TextField(
                 controller: controller,
+                focusNode: focusNode,
                 style: ToadType.hand(15, color: hintColor),
                 cursorColor: palette.accent,
                 decoration: InputDecoration(
@@ -333,9 +377,10 @@ class _RecentTile extends StatelessWidget {
 
 /// The A–Z index: Caveat letters as section headers.
 class _AzIndex extends StatelessWidget {
-  const _AzIndex({required this.apps});
+  const _AzIndex({required this.apps, required this.showBadges});
 
   final List<AppEntry> apps;
+  final bool showBadges;
 
   @override
   Widget build(BuildContext context) {
@@ -391,19 +436,18 @@ class _AzRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = ToadTheme.of(context).palette;
-    final rowColor =
-        ToadTheme.of(context).isDark ? const Color(0xFFE8E2D4) : palette.ink;
+    final rowColor = ToadTheme.of(context).isDark
+        ? const Color(0xFFE8E2D4)
+        : palette.ink;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => _DrawerHooks.of(context)?.onLaunch(app),
-      onLongPressStart: (details) => _DrawerHooks.of(context)
-          ?.onAppLongPress(app, details.globalPosition),
+      onLongPressStart: (details) =>
+          _DrawerHooks.of(context)?.onAppLongPress(app, details.globalPosition),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-        ),
+        decoration: BoxDecoration(borderRadius: BorderRadius.circular(16)),
         child: Row(
           children: [
             ToadAppIcon(
@@ -422,7 +466,9 @@ class _AzRow extends StatelessWidget {
                 style: ToadType.hand(15, color: rowColor),
               ),
             ),
-            if (app.badge != null) _BadgePill(text: app.badge!),
+            if (app.badge != null &&
+                (_DrawerHooks.of(context)?.showBadges ?? true))
+              _BadgePill(text: app.badge!),
           ],
         ),
       ),
@@ -459,10 +505,7 @@ class _BadgePill extends StatelessWidget {
 
 /// Flat, letter-less results list while searching.
 class _SearchResults extends StatelessWidget {
-  const _SearchResults({
-    required this.query,
-    required this.apps,
-  });
+  const _SearchResults({required this.query, required this.apps});
 
   final String query;
   final List<AppEntry> apps;
@@ -470,8 +513,9 @@ class _SearchResults extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = ToadTheme.of(context).palette;
-    final rowColor =
-        ToadTheme.of(context).isDark ? const Color(0xFFE8E2D4) : palette.ink;
+    final rowColor = ToadTheme.of(context).isDark
+        ? const Color(0xFFE8E2D4)
+        : palette.ink;
     final q = query.trim().toLowerCase();
     final hits = [
       for (final app in apps)
@@ -536,15 +580,20 @@ class _DrawerHooks extends InheritedWidget {
   const _DrawerHooks({
     required this.onLaunch,
     required this.onAppLongPress,
+    this.showBadges = true,
     required super.child,
   });
 
   final void Function(AppEntry app) onLaunch;
   final void Function(AppEntry app, Offset anchor) onAppLongPress;
 
+  /// Settings › Notifications › badges — hides the written counts live.
+  final bool showBadges;
+
   static _DrawerHooks? of(BuildContext context) =>
       context.getInheritedWidgetOfExactType<_DrawerHooks>();
 
   @override
-  bool updateShouldNotify(_DrawerHooks oldWidget) => false;
+  bool updateShouldNotify(_DrawerHooks oldWidget) =>
+      oldWidget.showBadges != showBadges;
 }

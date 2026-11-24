@@ -101,14 +101,19 @@ class _FolderOverlayState extends ConsumerState<FolderOverlay>
     final dark = skin.isDark;
 
     // Folder always reflects the freshest controller state (rename/remove).
-    final folder = ref.watch(homeLayoutProvider).valueOrNull
+    final folder =
+        ref
+            .watch(homeLayoutProvider)
+            .valueOrNull
             ?.folderById(widget.folder.id) ??
         widget.folder;
 
-    final cardAlpha =
-        skin.skin == ResolvedSkin.amoled ? 0.97 : (dark ? 0.96 : 0.94);
-    final cardColor =
-        palette.surface.withValues(alpha: palette.surface.a * cardAlpha);
+    final cardAlpha = skin.skin == ResolvedSkin.amoled
+        ? 0.97
+        : (dark ? 0.96 : 0.94);
+    final cardColor = palette.surface.withValues(
+      alpha: palette.surface.a * cardAlpha,
+    );
     final labelColor = dark ? const Color(0xFFE8E2D4) : palette.ink;
 
     // Apps + the trailing "Add app" slot from the mockup.
@@ -118,7 +123,9 @@ class _FolderOverlayState extends ConsumerState<FolderOverlay>
     ];
 
     final pageCount = (cells.length / 9).ceil();
-    final viewportRows = pageCount > 1 ? 3 : ((cells.length / 3).ceil()).clamp(1, 3);
+    final viewportRows = pageCount > 1
+        ? 3
+        : ((cells.length / 3).ceil()).clamp(1, 3);
     const double cellExtent = 72;
     final gridHeight =
         viewportRows * cellExtent + (viewportRows - 1) * ToadMetrics.gridRowGap;
@@ -213,9 +220,7 @@ class _FolderOverlayState extends ConsumerState<FolderOverlay>
 @immutable
 class _FolderCellData {
   const _FolderCellData.app(this.app) : isAddSlot = false;
-  const _FolderCellData.addApp()
-      : app = null,
-        isAddSlot = true;
+  const _FolderCellData.addApp() : app = null, isAddSlot = true;
 
   final AppEntry? app;
   final bool isAddSlot;
@@ -307,11 +312,11 @@ class _FolderCard extends StatelessWidget {
                     padding: EdgeInsets.zero,
                     gridDelegate:
                         const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 3,
-                      mainAxisExtent: 72,
-                      mainAxisSpacing: ToadMetrics.gridRowGap,
-                      crossAxisSpacing: 12,
-                    ),
+                          crossAxisCount: 3,
+                          mainAxisExtent: 72,
+                          mainAxisSpacing: ToadMetrics.gridRowGap,
+                          crossAxisSpacing: 12,
+                        ),
                     children: [
                       for (final cell in slice)
                         _FolderGridItem(
@@ -395,10 +400,7 @@ class _FolderTitle extends StatelessWidget {
       cursorColor: palette.accent,
       cursorWidth: 1.6,
       style: ToadType.caveat(27, color: labelColor, height: 1),
-      decoration: InputDecoration(
-        isCollapsed: true,
-        border: InputBorder.none,
-      ),
+      decoration: InputDecoration(isCollapsed: true, border: InputBorder.none),
       onSubmitted: (_) => renameFocus.unfocus(),
     );
   }
@@ -429,7 +431,11 @@ class _FolderGridItem extends StatelessWidget {
           children: [
             ToadAppIcon(
               app: const AppEntry(
-                  id: 'add-app', name: 'Add app', glyph: '＋', gradientIndex: 0),
+                id: 'add-app',
+                name: 'Add app',
+                glyph: '＋',
+                gradientIndex: 0,
+              ),
               shape: IconShape.squircle,
             ),
             const SizedBox(height: 4),
@@ -448,8 +454,9 @@ class _FolderGridItem extends StatelessWidget {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => onLaunch(app),
-      onLongPressStart:
-          onLongPress == null ? null : (d) => onLongPress!(d.globalPosition),
+      onLongPressStart: onLongPress == null
+          ? null
+          : (d) => onLongPress!(d.globalPosition),
       child: Column(
         children: [
           ToadAppIcon(app: app, shape: IconShape.squircle),
@@ -468,10 +475,10 @@ class _FolderGridItem extends StatelessWidget {
 
 /// Open-folder request the host listens to (raised from folder-tile menus).
 final StateNotifierProvider<OpenFolderController, OpenFolderRequest?>
-    openFolderProvider =
+openFolderProvider =
     StateNotifierProvider<OpenFolderController, OpenFolderRequest?>(
-  (ref) => OpenFolderController(),
-);
+      (ref) => OpenFolderController(),
+    );
 
 @immutable
 class OpenFolderRequest {
@@ -496,13 +503,12 @@ class OpenFolderController extends StateNotifier<OpenFolderRequest?> {
 
 /// Long-press inside the folder → the host shows the folderApp menu.
 final StateNotifierProvider<FolderItemMenuController, DrawerMenuRequest?>
-    openFolderMenuProvider =
+openFolderMenuProvider =
     StateNotifierProvider<FolderItemMenuController, DrawerMenuRequest?>(
-  (ref) => FolderItemMenuController(),
-);
+      (ref) => FolderItemMenuController(),
+    );
 
-class FolderItemMenuController
-    extends StateNotifier<DrawerMenuRequest?> {
+class FolderItemMenuController extends StateNotifier<DrawerMenuRequest?> {
   FolderItemMenuController() : super(null);
 
   void raise({required AppEntry app, required Offset anchor}) =>

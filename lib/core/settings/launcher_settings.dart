@@ -18,16 +18,31 @@ import '../theme/toad_tokens.dart';
 /// Accent options from Wallpaper & style (screen 9).
 enum AccentOption { toad, clay, steel, plum, gold, ink }
 
+/// Bundled sketchbook papers (screen 9 wallpaper grid).
+/// Papers ship inside the APK to honor the no-network promise.
+extension WallpaperX on int {
+  String get wallpaperLabel => switch (this) {
+    0 => 'Sage',
+    1 => 'Gold',
+    2 => 'Rose',
+    3 => 'Steel',
+    4 => 'Charcoal',
+    5 => 'AMOLED',
+    6 => 'Forest',
+    _ => 'Paper',
+  };
+}
+
 extension AccentOptionX on AccentOption {
   Color get color => kAccentOptions[index];
   String get label => switch (this) {
-        AccentOption.toad => 'Toad green',
-        AccentOption.clay => 'Clay',
-        AccentOption.steel => 'Steel',
-        AccentOption.plum => 'Plum',
-        AccentOption.gold => 'Gold',
-        AccentOption.ink => 'Ink',
-      };
+    AccentOption.toad => 'Toad green',
+    AccentOption.clay => 'Clay',
+    AccentOption.steel => 'Steel',
+    AccentOption.plum => 'Plum',
+    AccentOption.gold => 'Gold',
+    AccentOption.ink => 'Ink',
+  };
 }
 
 /// The full settings model. Immutable; patch via [LauncherSettingsController].
@@ -54,6 +69,12 @@ class LauncherSettings {
     this.sunsetMinute = 30,
     this.sunriseHour = 6,
     this.sunriseMinute = 30,
+    this.wallpaperIndex = 0,
+    this.clockSpanW = 4,
+    this.clockSpanH = 1,
+    this.editHintDismissed = false,
+    this.drawerSearch = true,
+    this.drawerRecents = true,
   });
 
   // Wallpaper & style.
@@ -88,6 +109,23 @@ class LauncherSettings {
   final int sunriseHour;
   final int sunriseMinute;
 
+  // Wallpaper & style additions (stage 3).
+
+  /// Bundled paper index (0..6); user photos arrive with device mode.
+  final int wallpaperIndex;
+
+  /// Caveat clock widget span — resizable 2×1 … 4×4 in edit mode;
+  /// "the clock re-renders live at each size".
+  final int clockSpanW;
+  final int clockSpanH;
+
+  /// The edit-mode hint bubble teaches once, then never again.
+  final bool editHintDismissed;
+
+  // Dock & drawer sub-page.
+  final bool drawerSearch;
+  final bool drawerRecents;
+
   LauncherSettings copyWith({
     SkinMode? skinMode,
     bool? pondPro,
@@ -109,6 +147,12 @@ class LauncherSettings {
     int? sunsetMinute,
     int? sunriseHour,
     int? sunriseMinute,
+    int? wallpaperIndex,
+    int? clockSpanW,
+    int? clockSpanH,
+    bool? editHintDismissed,
+    bool? drawerSearch,
+    bool? drawerRecents,
   }) {
     return LauncherSettings(
       skinMode: skinMode ?? this.skinMode,
@@ -132,31 +176,43 @@ class LauncherSettings {
       sunsetMinute: sunsetMinute ?? this.sunsetMinute,
       sunriseHour: sunriseHour ?? this.sunriseHour,
       sunriseMinute: sunriseMinute ?? this.sunriseMinute,
+      wallpaperIndex: wallpaperIndex ?? this.wallpaperIndex,
+      clockSpanW: clockSpanW ?? this.clockSpanW,
+      clockSpanH: clockSpanH ?? this.clockSpanH,
+      editHintDismissed: editHintDismissed ?? this.editHintDismissed,
+      drawerSearch: drawerSearch ?? this.drawerSearch,
+      drawerRecents: drawerRecents ?? this.drawerRecents,
     );
   }
 
   Map<String, Object> toJson() => {
-        'skinMode': skinMode.index,
-        'pondPro': pondPro,
-        'accent': accent.index,
-        'iconShape': iconShape.index,
-        'gridColumns': gridColumns,
-        'showMemoriesCard': showMemoriesCard,
-        'swipeUpDrawer': swipeUpDrawer,
-        'doubleTapSleep': doubleTapSleep,
-        'swipeDownNotifications': swipeDownNotifications,
-        'twoFingerScreenshot': twoFingerScreenshot,
-        'pinchEditMode': pinchEditMode,
-        'dockAreaSwipeSearch': dockAreaSwipeSearch,
-        'notificationDots': notificationDots,
-        'badges': badges,
-        'calmPond': calmPond,
-        'pondRain': pondRain,
-        'sunsetHour': sunsetHour,
-        'sunsetMinute': sunsetMinute,
-        'sunriseHour': sunriseHour,
-        'sunriseMinute': sunriseMinute,
-      };
+    'skinMode': skinMode.index,
+    'pondPro': pondPro,
+    'accent': accent.index,
+    'iconShape': iconShape.index,
+    'gridColumns': gridColumns,
+    'showMemoriesCard': showMemoriesCard,
+    'swipeUpDrawer': swipeUpDrawer,
+    'doubleTapSleep': doubleTapSleep,
+    'swipeDownNotifications': swipeDownNotifications,
+    'twoFingerScreenshot': twoFingerScreenshot,
+    'pinchEditMode': pinchEditMode,
+    'dockAreaSwipeSearch': dockAreaSwipeSearch,
+    'notificationDots': notificationDots,
+    'badges': badges,
+    'calmPond': calmPond,
+    'pondRain': pondRain,
+    'sunsetHour': sunsetHour,
+    'sunsetMinute': sunsetMinute,
+    'sunriseHour': sunriseHour,
+    'sunriseMinute': sunriseMinute,
+    'wallpaperIndex': wallpaperIndex,
+    'clockSpanW': clockSpanW,
+    'clockSpanH': clockSpanH,
+    'editHintDismissed': editHintDismissed,
+    'drawerSearch': drawerSearch,
+    'drawerRecents': drawerRecents,
+  };
 
   factory LauncherSettings.fromJson(Map<String, Object?> json) {
     return LauncherSettings(
@@ -180,6 +236,12 @@ class LauncherSettings {
       sunsetMinute: (json['sunsetMinute'] as int?) ?? 30,
       sunriseHour: (json['sunriseHour'] as int?) ?? 6,
       sunriseMinute: (json['sunriseMinute'] as int?) ?? 30,
+      wallpaperIndex: (json['wallpaperIndex'] as int?) ?? 0,
+      clockSpanW: (json['clockSpanW'] as int?) ?? 4,
+      clockSpanH: (json['clockSpanH'] as int?) ?? 2,
+      editHintDismissed: (json['editHintDismissed'] as bool?) ?? false,
+      drawerSearch: (json['drawerSearch'] as bool?) ?? true,
+      drawerRecents: (json['drawerRecents'] as bool?) ?? true,
     );
   }
 }
@@ -230,19 +292,46 @@ class LauncherSettingsController extends Notifier<LauncherSettings> {
       patch(state.copyWith(showMemoriesCard: v));
   void setCalmPond(bool v) => patch(state.copyWith(calmPond: v));
   void setPondRain(bool v) => patch(state.copyWith(pondRain: v));
+  void setWallpaperIndex(int i) =>
+      patch(state.copyWith(wallpaperIndex: i.clamp(0, 6)));
+  void setClockSpan({int? w, int? h}) => patch(
+    state.copyWith(
+      clockSpanW: (w ?? state.clockSpanW).clamp(2, 4),
+      clockSpanH: (h ?? state.clockSpanH).clamp(1, 4),
+    ),
+  );
+  void setEditHintDismissed() => patch(state.copyWith(editHintDismissed: true));
+  void setDrawerSearch(bool v) => patch(state.copyWith(drawerSearch: v));
+  void setDrawerRecents(bool v) => patch(state.copyWith(drawerRecents: v));
+  void setNotificationDots(bool v) =>
+      patch(state.copyWith(notificationDots: v));
+  void setBadges(bool v) => patch(state.copyWith(badges: v));
+
+  // Gesture switches — named uniformly for the gestures sub-page.
+  void patchSwipeUpDrawer(bool v) => patch(state.copyWith(swipeUpDrawer: v));
+  void patchDoubleTapSleep(bool v) => patch(state.copyWith(doubleTapSleep: v));
+  void patchSwipeDownNotifications(bool v) =>
+      patch(state.copyWith(swipeDownNotifications: v));
+  void patchTwoFingerScreenshot(bool v) =>
+      patch(state.copyWith(twoFingerScreenshot: v));
+  void patchPinchEditMode(bool v) => patch(state.copyWith(pinchEditMode: v));
+  void patchDockAreaSwipeSearch(bool v) =>
+      patch(state.copyWith(dockAreaSwipeSearch: v));
 }
 
 /// Ticker for the hero clock and pond day/night anchors.
 /// Emits every 5 seconds — minute-precision UI never lags, cost is nil.
-final StreamProvider<DateTime> clockProvider = StreamProvider<DateTime>(
-  (ref) async* {
-    while (true) {
-      yield DateTime.now();
-      await Future<void>.delayed(const Duration(seconds: 5));
-    }
-  },
-);
+final StreamProvider<DateTime> clockProvider = StreamProvider<DateTime>((
+  ref,
+) async* {
+  while (true) {
+    yield DateTime.now();
+    await Future<void>.delayed(const Duration(seconds: 5));
+  }
+});
 
 final NotifierProvider<LauncherSettingsController, LauncherSettings>
-    launcherSettingsProvider = NotifierProvider<LauncherSettingsController,
-        LauncherSettings>(LauncherSettingsController.new);
+launcherSettingsProvider =
+    NotifierProvider<LauncherSettingsController, LauncherSettings>(
+      LauncherSettingsController.new,
+    );

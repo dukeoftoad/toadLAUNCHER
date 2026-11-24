@@ -56,9 +56,18 @@ class DemoAppRepository implements AppRepository {
   static const List<AppEntry> _page3 = [
     AppEntry(id: 'banking', name: 'Banking', glyph: '⌂', gradientIndex: 5),
     AppEntry(
-        id: 'authenticator', name: 'Authenticator', glyph: '✓', gradientIndex: 0),
+      id: 'authenticator',
+      name: 'Authenticator',
+      glyph: '✓',
+      gradientIndex: 0,
+    ),
     AppEntry(id: 'alarm', name: 'Alarm', glyph: '⏰', gradientIndex: 2),
-    AppEntry(id: 'calculator', name: 'Calculator', glyph: '＋', gradientIndex: 7),
+    AppEntry(
+      id: 'calculator',
+      name: 'Calculator',
+      glyph: '＋',
+      gradientIndex: 7,
+    ),
     AppEntry(id: 'calendar', name: 'Calendar', glyph: '▤', gradientIndex: 3),
     AppEntry(id: 'contacts', name: 'Contacts', glyph: '☺', gradientIndex: 1),
     AppEntry(id: 'recorder', name: 'Recorder', glyph: '◉', gradientIndex: 6),
@@ -82,10 +91,11 @@ class DemoAppRepository implements AppRepository {
       AppEntry(id: 'camera', name: 'Camera', glyph: '◉', gradientIndex: 3),
       AppEntry(id: 'music', name: 'Music', glyph: '♪', gradientIndex: 6),
       AppEntry(
-          id: 'family.toad.player',
-          name: 'toadPLAYER',
-          glyph: '',
-          isFamilyToad: true),
+        id: 'family.toad.player',
+        name: 'toadPLAYER',
+        glyph: '',
+        isFamilyToad: true,
+      ),
       AppEntry(id: 'recorder', name: 'Recorder', glyph: '◉', gradientIndex: 6),
       AppEntry(id: 'files', name: 'Files', glyph: '▤', gradientIndex: 7),
       AppEntry(id: 'casts', name: 'Casts', glyph: '↗', gradientIndex: 4),
@@ -96,9 +106,18 @@ class DemoAppRepository implements AppRepository {
   static const List<AppEntry> _drawerApps = [
     AppEntry(id: 'alarm', name: 'Alarm', glyph: '⏰', gradientIndex: 2),
     AppEntry(
-        id: 'authenticator', name: 'Authenticator', glyph: '✓', gradientIndex: 0),
+      id: 'authenticator',
+      name: 'Authenticator',
+      glyph: '✓',
+      gradientIndex: 0,
+    ),
     AppEntry(id: 'banking', name: 'Banking', glyph: '⌂', gradientIndex: 5),
-    AppEntry(id: 'calculator', name: 'Calculator', glyph: '＋', gradientIndex: 7),
+    AppEntry(
+      id: 'calculator',
+      name: 'Calculator',
+      glyph: '＋',
+      gradientIndex: 7,
+    ),
     AppEntry(id: 'calendar', name: 'Calendar', glyph: '▤', gradientIndex: 3),
     AppEntry(id: 'camera', name: 'Camera', glyph: '◉', gradientIndex: 3),
     AppEntry(id: 'chrome', name: 'Chrome', glyph: '◍', gradientIndex: 7),
@@ -134,10 +153,7 @@ class DemoAppRepository implements AppRepository {
       pages: [
         [for (final a in _page1) AppCell(a)],
         // The Media folder tile leads page 2 (folder screens, stage 2).
-        [
-          const FolderCell(_mediaFolder),
-          for (final a in _page2) AppCell(a),
-        ],
+        [const FolderCell(_mediaFolder), for (final a in _page2) AppCell(a)],
         [for (final a in _page3) AppCell(a)],
       ],
       dock: _dock,
@@ -162,17 +178,17 @@ class DemoAppRepository implements AppRepository {
   /// represented by a marker entry the UI renders as the toad itself.
   @override
   Future<List<List<AppEntry>>> loadPondRows() async => const [
-        [
-          _toadGallery,
-          AppEntry(id: 'phone', name: 'Phone', glyph: '✆', gradientIndex: 0),
-          AppEntry(id: 'messages', name: 'Messages', glyph: '✉', gradientIndex: 1),
-        ],
-        [
-          AppEntry(id: 'camera', name: 'Camera', glyph: '◉', gradientIndex: 3),
-          AppEntry(id: 'chrome', name: 'Chrome', glyph: '◍', gradientIndex: 7),
-          AppEntry(id: 'resident', name: 'the resident', glyph: ''),
-        ],
-      ];
+    [
+      _toadGallery,
+      AppEntry(id: 'phone', name: 'Phone', glyph: '✆', gradientIndex: 0),
+      AppEntry(id: 'messages', name: 'Messages', glyph: '✉', gradientIndex: 1),
+    ],
+    [
+      AppEntry(id: 'camera', name: 'Camera', glyph: '◉', gradientIndex: 3),
+      AppEntry(id: 'chrome', name: 'Chrome', glyph: '◍', gradientIndex: 7),
+      AppEntry(id: 'resident', name: 'the resident', glyph: ''),
+    ],
+  ];
 
   @override
   Future<void> launch(AppEntry app) async {
@@ -182,5 +198,6 @@ class DemoAppRepository implements AppRepository {
 }
 
 /// Bilocator for the active repository (demo now; device later).
-final Provider<AppRepository> appRepositoryProvider =
-    Provider<AppRepository>((ref) => const DemoAppRepository());
+final Provider<AppRepository> appRepositoryProvider = Provider<AppRepository>(
+  (ref) => const DemoAppRepository(),
+);

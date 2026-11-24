@@ -30,23 +30,35 @@ void main() {
 
     test('greetings follow the hour', () {
       expect(
-        buildHeroData(DateTime(2026, 11, 24, 8), pond: false, pondNight: false)
-            .noteTop,
+        buildHeroData(
+          DateTime(2026, 11, 24, 8),
+          pond: false,
+          pondNight: false,
+        ).noteTop,
         'good morning',
       );
       expect(
-        buildHeroData(DateTime(2026, 11, 24, 14), pond: false, pondNight: false)
-            .noteTop,
+        buildHeroData(
+          DateTime(2026, 11, 24, 14),
+          pond: false,
+          pondNight: false,
+        ).noteTop,
         'good afternoon',
       );
       expect(
-        buildHeroData(DateTime(2026, 11, 24, 18), pond: false, pondNight: false)
-            .noteTop,
+        buildHeroData(
+          DateTime(2026, 11, 24, 18),
+          pond: false,
+          pondNight: false,
+        ).noteTop,
         'good evening',
       );
       expect(
-        buildHeroData(DateTime(2026, 11, 24, 22), pond: false, pondNight: false)
-            .noteTop,
+        buildHeroData(
+          DateTime(2026, 11, 24, 22),
+          pond: false,
+          pondNight: false,
+        ).noteTop,
         'good night',
       );
     });

@@ -23,14 +23,33 @@ class HeroClockData {
 }
 
 /// Pure formatting so the widget stays dumb and testable.
-HeroClockData buildHeroData(DateTime now,
-    {required bool pond, required bool pondNight}) {
+HeroClockData buildHeroData(
+  DateTime now, {
+  required bool pond,
+  required bool pondNight,
+}) {
   const weekdays = [
-    'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
+    'Sunday',
   ];
   const months = [
-    'January', 'February', 'March', 'April', 'May', 'June', 'July',
-    'August', 'September', 'October', 'November', 'December',
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
   ];
 
   final hh = now.hour.toString().padLeft(2, '0');
@@ -42,8 +61,9 @@ HeroClockData buildHeroData(DateTime now,
 
   // Days until the 1st of the next month ("3 days to December").
   final nextMonth = DateTime(now.year, now.month + 1, 1);
-  final daysTo =
-      nextMonth.difference(DateTime(now.year, now.month, now.day)).inDays;
+  final daysTo = nextMonth
+      .difference(DateTime(now.year, now.month, now.day))
+      .inDays;
   final monthNote =
       '$daysTo ${daysTo == 1 ? 'day' : 'days'} to ${months[nextMonth.month - 1]}';
 
@@ -75,7 +95,9 @@ HeroClockData buildHeroData(DateTime now,
     greeting = 'good night';
   }
 
-  final bottom = (now.hour >= 21 || now.hour < 5) ? 'wind down soon' : monthNote;
+  final bottom = (now.hour >= 21 || now.hour < 5)
+      ? 'wind down soon'
+      : monthNote;
 
   return HeroClockData(
     time: time,
