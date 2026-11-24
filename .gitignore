@@ -46,3 +46,6 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Generated at build time by the Flutter tool (v1-style copies break modern builds)
+android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java
