@@ -17,6 +17,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/models/models.dart';
+import '../../core/device/device_bridge.dart';
+import '../../core/device/toad_family.dart';
 import '../../core/settings/launcher_settings.dart' show clockProvider;
 import '../../core/theme/toad_theme.dart';
 import '../../core/theme/toad_tokens.dart';
@@ -188,6 +190,7 @@ class WidgetPickerSheet extends ConsumerWidget {
                                   )
                                 : () => _pick(context, ref, WidgetKind.sticky),
                           ),
+                          const _FamilyWidgetsSection(),
                         ],
                       ),
                     ),
@@ -545,6 +548,122 @@ class _GhostPreview extends StatelessWidget {
           },
         ),
       ),
+    );
+  }
+}
+
+/// Real home-screen widgets published by installed toad family apps —
+/// discovered through the platform channel; pinning goes through the
+/// system's own confirmation. Hidden entirely when nothing is offered
+/// (or when the channel is not in device mode).
+class _FamilyWidgetsSection extends ConsumerStatefulWidget {
+  const _FamilyWidgetsSection();
+
+  @override
+  ConsumerState<_FamilyWidgetsSection> createState() =>
+      _FamilyWidgetsSectionState();
+}
+
+class _FamilyWidgetsSectionState extends ConsumerState<_FamilyWidgetsSection> {
+  late Future<List<ToadWidgetInfo>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = ref
+        .read(deviceBridgeProvider)
+        .toadWidgets([
+          for (final app in kToadFamilyApps) app.packageId,
+        ]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final skin = ToadTheme.of(context);
+    final palette = skin.palette;
+    final dark = skin.isDark;
+    final ink = dark ? const Color(0xFFE8E2D4) : palette.ink;
+
+    return FutureBuilder<List<ToadWidgetInfo>>(
+      future: _future,
+      builder: (context, snap) {
+        final widgets = snap.data ?? const <ToadWidgetInfo>[];
+        if (snap.connectionState != ConnectionState.done || widgets.isEmpty) {
+          return const SizedBox.shrink();
+        }
+        return Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 6, 8, 2),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'from the toad family',
+                    style: ToadType.caveat(21, color: palette.ink),
+                  ),
+                ),
+              ),
+              for (final w in widgets)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              w.label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: ToadType.hand(14.5, color: ink),
+                            ),
+                            const SizedBox(height: 1),
+                            Text(
+                              'real home-screen widget · ${w.packageName}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: ToadType.inter(
+                                10.5,
+                                color: ink.withValues(alpha: ink.a * 0.55),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () async {
+                          await ref
+                              .read(deviceBridgeProvider)
+                              .pinWidget(w.providerId);
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 7,
+                          ),
+                          decoration: BoxDecoration(
+                            color: palette.accentWash,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            'pin',
+                            style: ToadType.hand(13, color: palette.accentInk),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

@@ -7,9 +7,14 @@ library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../device/device_bridge.dart';
 import '../models/models.dart';
+import '../settings/launcher_settings.dart';
+import 'device_app_repository.dart';
 
 abstract class AppRepository {
+  const AppRepository();
+
   Future<HomeLayout> loadHomeLayout({int columnsPerRow});
 
   /// Pond Pro pad rows (3 pads per row; the resident occupies the last
@@ -18,10 +23,19 @@ abstract class AppRepository {
 
   /// Launch by package; demo mode no-ops.
   Future<void> launch(AppEntry app);
+
+  /// Hand the app to the system uninstaller. Demo answers honestly:
+  /// false — the UI then explains device mode is off.
+  Future<bool> uninstallApp(AppEntry app) async => false;
+
+  /// Open the system App info page. Demo answers false.
+  Future<bool> openAppDetails(AppEntry app) async => false;
 }
 
 /// Demo index mirroring the design mockups (screens 1, 4, 5, 11).
-class DemoAppRepository implements AppRepository {
+/// Extends (not implements) so it inherits the honest `false` defaults
+/// for the device-only actions.
+class DemoAppRepository extends AppRepository {
   const DemoAppRepository();
 
   static const AppEntry _toadGallery = AppEntry(
@@ -197,7 +211,24 @@ class DemoAppRepository implements AppRepository {
   }
 }
 
-/// Bilocator for the active repository (demo now; device later).
+/// Bilocator for the active repository — Device mode when the platform
+/// channel answers AND the user kept it on (default); Demo otherwise
+/// (tests, web, and the honest fallback if Android ever stops answering).
 final Provider<AppRepository> appRepositoryProvider = Provider<AppRepository>(
-  (ref) => const DemoAppRepository(),
+  (ref) {
+    final reachable = ref.watch(deviceCapabilityProvider).value ?? false;
+    final settings = ref.watch(launcherSettingsProvider);
+    if (reachable && settings.deviceMode) {
+      return DeviceAppRepository(
+        ref.watch(deviceBridgeProvider),
+        usageOptIn: settings.usageRecentsOptIn,
+      );
+    }
+    return const DemoAppRepository();
+  },
+);
+
+/// One-shot probe: does the Android side of the channel exist?
+final FutureProvider<bool> deviceCapabilityProvider = FutureProvider<bool>(
+  (ref) => ref.watch(deviceBridgeProvider).available(),
 );

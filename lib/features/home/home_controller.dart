@@ -3,10 +3,12 @@
 /// stage-3 widget engine (place / resize / move / undo).
 library;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/models.dart';
 import '../../core/repositories/app_repository.dart';
+import '../../core/repositories/device_app_repository.dart';
 import '../../core/settings/launcher_settings.dart';
 
 /// Async home layout from the repository (demo-seeded for this alpha).
@@ -19,8 +21,17 @@ class HomeController extends AsyncNotifier<HomeLayout> {
 
   @override
   Future<HomeLayout> build() async {
-    final repo = ref.read(appRepositoryProvider);
+    // Watched: flipping Device/Demo in settings rebuilds the home from the
+    // newly active repository.
+    final repo = ref.watch(appRepositoryProvider);
     final layout = await repo.loadHomeLayout();
+
+    // Device mode: publish the real adaptive icons for the tile renderer.
+    if (repo is DeviceAppRepository) {
+      ref.read(deviceIconsProvider.notifier).state = Map<String, Uint8List>.of(
+        repo.iconBytes,
+      );
+    }
     final settings = ref.read(launcherSettingsProvider);
 
     // The Caveat clock is the hero widget — seeded on page 0 unless the
@@ -39,9 +50,10 @@ class HomeController extends AsyncNotifier<HomeLayout> {
       );
     }
     // toadGALLERY's Memories strip is the featured widget of the toad
-    // family — it appears only when the gallery is installed.
+    // family — it appears only when the gallery is installed (demo id or
+    // the real package id from device mode).
     final galleryInstalled = layout.allApps.any(
-      (a) => a.id == 'family.toad.gallery',
+      (a) => a.id == 'family.toad.gallery' || a.id == 'com.toadgallery.app',
     );
     if (galleryInstalled &&
         !layout.widgets.any((w) => w.kind == WidgetKind.memories)) {

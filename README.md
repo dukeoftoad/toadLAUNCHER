@@ -6,12 +6,36 @@ network permission at all**.
 
 Built from the approved UI/UX design proposal v1.1 (14 mockups, 4 themes).
 
-## Status — v0.9.0-beta (first signed release)
+## Status — v0.10.0-beta (device mode · API 37 · the whole family)
 
-All four stages are implemented (see walkthroughs below). This release adds the
-**hand-crafted toad launcher icon** (paper-craft sticker, adaptive for Android
-8+, monochrome theming layer included) and a **committed release keystore** so
-every build installs over the previous one.
+All four design stages remain implemented (walkthroughs below). v0.10 wires
+the launcher to the real phone:
+
+- **Device mode** — the index comes from Android's package manager (labels,
+  adaptive icons, real launches). Falls back to demo honestly when the
+  channel does not answer; the switch lives in Settings → *Device &
+  updates*.
+- **Real actions** — uninstall (system dialog is the last word), App info,
+  SAF wallpaper import + apply. `REQUEST_DELETE_PACKAGES` and
+  `REQUEST_INSTALL_PACKAGES` declared; `PACKAGE_USAGE_STATS` is opt-in
+  special access for usage-based recents (off never nags).
+- **The toad family, themed** — every sibling is themed with the shared
+  toad-face tile and a pinned drawer section. Membership uses the
+  *verified* applicationIds (toadNOTES ships as `com.nestnote.app`,
+  toadTIMER as `dev.toad.toadtimer` — no prefix guessing), plus the
+  `family.toad.*` prefix for future siblings. Two or more installed apps
+  auto-curate the **toad family** folder, and their real home-screen
+  widgets appear in the picker with system-confirmed pinning.
+- **Auto-update, toadFILES flow, zero INTERNET** — one silent check per
+  process against `github.com/dukeoftoad/toadLAUNCHER/releases/latest`, a
+  slim dismissable home banner, DownloadManager download with live
+  progress, a SHA-256 gate, then the system installer. The download runs
+  in the **system's process** — the launcher itself still holds **no
+  INTERNET permission**. Manual check + switches live in Settings.
+- **Kotlin budget: one file.** `MainActivity.kt` is a pure OS adapter —
+  every decision (index, registry, update state machine, version compare,
+  settings, persistence) is Flutter/Dart. CI runs on **target/compile
+  SDK 37**.
 
 | Stage | Scope | State |
 |---|---|---|
@@ -19,6 +43,7 @@ every build installs over the previous one.
 | 2 (M2a) | A–Z drawer + search + recents, folders (shared-axis open, inline rename), long-press menus with two-step uninstall | **done** |
 | 3 (M2b/M3) | Edit mode with honest snapping, widget picker, wallpaper & style, settings hub + gestures | **done** |
 | 4 (M4) | Pond ambient loop, mouth drawer, Calm-pond + battery guard | **done** |
+| 5 (v0.10) | Device mode, real permissions, toad family theming, auto-update, API 37 | **done** |
 
 ## Stage 4 walkthrough (the pond comes alive)
 
@@ -131,7 +156,7 @@ Release named `toadLAUNCHER v0.9.0-beta` with the APK + sha256 attached.
 
 ```bash
 flutter analyze   # zero issues
-flutter test      # 67 tests
+flutter test      # 93 tests — incl. bridge contract, family registry, update engine
 flutter run       # demo mode: the proposal's app set, no device needed
 ```
 

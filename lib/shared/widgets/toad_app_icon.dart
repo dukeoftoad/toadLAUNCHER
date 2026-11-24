@@ -2,14 +2,17 @@
 library;
 
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/models.dart';
+import '../../core/repositories/device_app_repository.dart';
 import '../../core/theme/toad_tokens.dart';
 import '../../core/theme/toad_theme.dart';
 
 /// One app icon: 54x54 r17 tile with 145deg gradient and a 24px glyph.
-/// Family-toad apps render the shared toad face from the proposal.
-class ToadAppIcon extends StatelessWidget {
+/// Family-toad apps render the shared toad face from the proposal; device
+/// mode swaps demo glyphs for the app's real adaptive icon.
+class ToadAppIcon extends ConsumerWidget {
   const ToadAppIcon({
     super.key,
     required this.app,
@@ -26,14 +29,18 @@ class ToadAppIcon extends StatelessWidget {
   final IconShape shape;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final double effectiveRadius = switch (shape) {
       IconShape.squircle => radius,
       IconShape.circle => size / 2,
       IconShape.rounded => size * 0.38,
     };
 
-    final gradient = app.isFamilyToad
+    final realIcon = app.packageName == null
+        ? null
+        : ref.watch(deviceIconsProvider)[app.packageName!];
+
+    final gradient = app.isFamilyToad && realIcon == null
         ? AppIconGradients.toad
         : AppIconGradients.all[app.gradientIndex % AppIconGradients.all.length];
 
@@ -58,7 +65,18 @@ class ToadAppIcon extends StatelessWidget {
         ],
       ),
       child: Center(
-        child: app.isFamilyToad
+        child: realIcon != null
+            ? ClipRRect(
+                borderRadius: BorderRadius.circular(effectiveRadius),
+                child: Image.memory(
+                  realIcon,
+                  width: size,
+                  height: size,
+                  fit: BoxFit.cover,
+                  gaplessPlayback: true,
+                ),
+              )
+            : app.isFamilyToad
             ? CustomPaint(
                 size: Size.square(size * 0.5),
                 painter: ToadFacePainter(),

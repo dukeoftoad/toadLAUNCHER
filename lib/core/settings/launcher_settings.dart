@@ -76,6 +76,9 @@ class LauncherSettings {
     this.editHintDismissed = false,
     this.drawerSearch = true,
     this.drawerRecents = true,
+    this.deviceMode = true,
+    this.autoUpdateCheck = true,
+    this.usageRecentsOptIn = false,
   });
 
   // Wallpaper & style.
@@ -132,6 +135,20 @@ class LauncherSettings {
   final bool drawerSearch;
   final bool drawerRecents;
 
+  // Device & updates (v0.10).
+
+  /// Device mode: the index comes from the real package manager. Falls
+  /// back to demo automatically when the channel does not answer.
+  final bool deviceMode;
+
+  /// One silent update check per process (GitHub releases via the system
+  /// download service — never our own network permission).
+  final bool autoUpdateCheck;
+
+  /// Opt-in for system usage stats in the drawer recents row. Off keeps
+  /// the launcher's own recorded history; off never nags.
+  final bool usageRecentsOptIn;
+
   LauncherSettings copyWith({
     SkinMode? skinMode,
     bool? pondPro,
@@ -160,6 +177,9 @@ class LauncherSettings {
     bool? editHintDismissed,
     bool? drawerSearch,
     bool? drawerRecents,
+    bool? deviceMode,
+    bool? autoUpdateCheck,
+    bool? usageRecentsOptIn,
   }) {
     return LauncherSettings(
       skinMode: skinMode ?? this.skinMode,
@@ -190,6 +210,9 @@ class LauncherSettings {
       editHintDismissed: editHintDismissed ?? this.editHintDismissed,
       drawerSearch: drawerSearch ?? this.drawerSearch,
       drawerRecents: drawerRecents ?? this.drawerRecents,
+      deviceMode: deviceMode ?? this.deviceMode,
+      autoUpdateCheck: autoUpdateCheck ?? this.autoUpdateCheck,
+      usageRecentsOptIn: usageRecentsOptIn ?? this.usageRecentsOptIn,
     );
   }
 
@@ -221,6 +244,9 @@ class LauncherSettings {
     'editHintDismissed': editHintDismissed,
     'drawerSearch': drawerSearch,
     'drawerRecents': drawerRecents,
+    'deviceMode': deviceMode,
+    'autoUpdateCheck': autoUpdateCheck,
+    'usageRecentsOptIn': usageRecentsOptIn,
   };
 
   factory LauncherSettings.fromJson(Map<String, Object?> json) {
@@ -252,6 +278,9 @@ class LauncherSettings {
       editHintDismissed: (json['editHintDismissed'] as bool?) ?? false,
       drawerSearch: (json['drawerSearch'] as bool?) ?? true,
       drawerRecents: (json['drawerRecents'] as bool?) ?? true,
+      deviceMode: (json['deviceMode'] as bool?) ?? true,
+      autoUpdateCheck: (json['autoUpdateCheck'] as bool?) ?? true,
+      usageRecentsOptIn: (json['usageRecentsOptIn'] as bool?) ?? false,
     );
   }
 }
@@ -328,6 +357,12 @@ class LauncherSettingsController extends Notifier<LauncherSettings> {
   void patchPinchEditMode(bool v) => patch(state.copyWith(pinchEditMode: v));
   void patchDockAreaSwipeSearch(bool v) =>
       patch(state.copyWith(dockAreaSwipeSearch: v));
+
+  // Device & updates switches.
+  void setDeviceMode(bool v) => patch(state.copyWith(deviceMode: v));
+  void setAutoUpdateCheck(bool v) => patch(state.copyWith(autoUpdateCheck: v));
+  void setUsageRecentsOptIn(bool v) =>
+      patch(state.copyWith(usageRecentsOptIn: v));
 }
 
 /// Ticker for the hero clock and pond day/night anchors.

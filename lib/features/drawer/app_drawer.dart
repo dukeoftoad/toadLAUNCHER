@@ -384,10 +384,23 @@ class _AzIndex extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // The family gets its own pinned section at the top — Caveat header,
+    // toad-face tiles — and is skipped by the A–Z rows (no duplicates).
+    final family = apps.where((a) => a.isFamilyToad).toList();
+    final rest = apps.where((a) => !a.isFamilyToad).toList();
+
     final rows = <Widget>[];
+    if (family.isNotEmpty) {
+      rows.add(const _FamilyHeader());
+      for (final app in family) {
+        rows.add(_AzRow(app: app));
+      }
+      rows.add(const _FamilyDivider());
+    }
+
     String? currentLetter;
 
-    for (final app in apps) {
+    for (final app in rest) {
       final letter = app.name.isEmpty ? '#' : app.name[0].toUpperCase();
       if (letter != currentLetter) {
         currentLetter = letter;
@@ -399,6 +412,43 @@ class _AzIndex extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(8, 2, 8, 0),
       children: rows,
+    );
+  }
+}
+
+/// Pinned section header for the toad family apps (device mode surfaces
+/// the real siblings; demo keeps toadGALLERY + toadPLAYER).
+class _FamilyHeader extends StatelessWidget {
+  const _FamilyHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = ToadTheme.of(context).palette;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 6, 12, 4),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
+          'the toad family',
+          style: ToadType.caveat(24, height: 1, color: palette.ink),
+        ),
+      ),
+    );
+  }
+}
+
+/// Hairline between the family block and the A–Z index.
+class _FamilyDivider extends StatelessWidget {
+  const _FamilyDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = ToadTheme.of(context).palette;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 6, 12, 2),
+      child: Divider(height: 1, thickness: 1, color: palette.hairline),
     );
   }
 }

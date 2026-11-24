@@ -15,6 +15,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/settings/launcher_settings.dart';
+import '../../core/device/device_bridge.dart';
+import '../../core/device/update_engine.dart';
+import '../../core/repositories/app_repository.dart';
 import '../../core/theme/toad_theme.dart';
 import '../../core/theme/toad_tokens.dart';
 import '../wallpaper_style/wallpaper_style_screen.dart'
@@ -123,6 +126,14 @@ class SettingsHub extends ConsumerWidget {
               palette: palette,
               onTap: () => _push(context, const PrivacyPage()),
             ),
+            _SetRow(
+              icon: '⇄',
+              title: 'Device & updates',
+              subtitle: _deviceSubtitle(ref),
+              ink: ink,
+              palette: palette,
+              onTap: () => _push(context, const DeviceUpdatesSettingsPage()),
+            ),
           ],
         ),
         _GroupCard(
@@ -153,6 +164,15 @@ class SettingsHub extends ConsumerWidget {
 
   void _push(BuildContext context, Widget page) {
     Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => page));
+  }
+
+  String _deviceSubtitle(WidgetRef ref) {
+    final settings = ref.watch(launcherSettingsProvider);
+    final reachable = ref.watch(deviceCapabilityProvider).value ?? false;
+    final mode = settings.deviceMode && reachable
+        ? 'device mode'
+        : 'demo mode';
+    return "$mode · updates ${settings.autoUpdateCheck ? 'auto' : 'manual'}";
   }
 }
 
@@ -480,7 +500,7 @@ class AboutPage extends ConsumerWidget {
               Text('toadLAUNCHER', style: ToadType.caveat(34, color: ink)),
               const SizedBox(height: 6),
               Text(
-                'v0.1.0-alpha.1 · stage 3',
+                'v0.10.0-beta · device mode + the whole family',
                 style: ToadType.inter(
                   11,
                   color: ink.withValues(alpha: ink.a * 0.6),
@@ -517,6 +537,234 @@ class AboutPage extends ConsumerWidget {
 // ---------------------------------------------------------------------------
 // Shared chrome
 // ---------------------------------------------------------------------------
+
+/// Device & updates — real backend, silent self-update (toadFILES flow),
+/// usage-access opt-in. Everything stated plainly, nothing hidden.
+class DeviceUpdatesSettingsPage extends ConsumerWidget {
+  const DeviceUpdatesSettingsPage({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final skin = ToadTheme.of(context);
+    final palette = skin.palette;
+    final dark = skin.isDark;
+    final ink = dark ? const Color(0xFFE8E2D4) : palette.ink;
+    final settings = ref.watch(launcherSettingsProvider);
+    final notifier = ref.read(launcherSettingsProvider.notifier);
+    final update = ref.watch(updateEngineProvider);
+    final reachable = ref.watch(deviceCapabilityProvider).value ?? false;
+
+    return _SettingsScaffold(
+      title: 'Device & updates',
+      children: [
+        _GroupCard(
+          palette: palette,
+          children: [
+            _SwitchRow(
+              title: 'Device mode',
+              subtitle: reachable
+                  ? 'Real apps from this phone · falls back to demo if '
+                        'Android ever stops answering'
+                  : 'Android is not answering — demo mode stays on',
+              value: settings.deviceMode && reachable,
+              accent: palette.accent,
+              ink: ink,
+              onChanged: reachable
+                  ? (v) => notifier.setDeviceMode(v)
+                  : null,
+            ),
+            _SwitchRow(
+              title: 'Usage-based recents',
+              subtitle:
+                  'Opt-in special access. Off keeps the launcher\'s own '
+                  'launch history — off never nags',
+              value: settings.usageRecentsOptIn,
+              accent: palette.accent,
+              ink: ink,
+              onChanged: (v) async {
+                notifier.setUsageRecentsOptIn(v);
+                if (v) {
+                  final granted = await ref
+                      .read(deviceBridgeProvider)
+                      .hasUsageAccess();
+                  if (!granted) {
+                    await ref
+                        .read(deviceBridgeProvider)
+                        .openUsageAccessSettings();
+                  }
+                }
+              },
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        _GroupCard(
+          palette: palette,
+          children: [
+            _SwitchRow(
+              title: 'Check for updates on start',
+              subtitle:
+                  'Once per process, silent. Runs through the system '
+                  'download service — the launcher itself has no INTERNET '
+                  'permission (same flow as toadFILES)',
+              value: settings.autoUpdateCheck,
+              accent: palette.accent,
+              ink: ink,
+              onChanged: (v) => notifier.setAutoUpdateCheck(v),
+            ),
+            _UpdateCheckRow(state: update, ink: ink, palette: palette),
+          ],
+        ),
+        const SizedBox(height: 14),
+        Text(
+          'updates come from github.com/dukeoftoad/toadLAUNCHER releases — '
+          'one endpoint, nothing else',
+          textAlign: TextAlign.center,
+          style: ToadType.inter(
+            10.5,
+            color: ink.withValues(alpha: ink.a * 0.5),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The manual check row + inline flow state (checking / up to date /
+/// available → download / progress / install handoff / errors).
+class _UpdateCheckRow extends StatelessWidget {
+  const _UpdateCheckRow({required this.state, required this.ink, required this.palette});
+
+  final UpdateState state;
+  final Color ink;
+  final ToadPalette palette;
+
+  @override
+  Widget build(BuildContext context) {
+    final ctl = ProviderScope.containerOf(context).read(updateEngineProvider.notifier);
+
+    final (String title, String subtitle, String? action) = switch (state) {
+      UpdateIdle() => (
+        'Check for updates now',
+        'Current build vs the newest release',
+        null,
+      ),
+      UpdateChecking() => ('Checking the pond…', 'Asking GitHub releases', null),
+      UpdateUpToDate(:final version) => (
+        'Up to date',
+        'v$version is the newest build',
+        'check again',
+      ),
+      UpdateAvailable(:final release) => (
+        'Update available',
+        '${release.tagName} · ${_fmtSize(release.apkSizeBytes)} · '
+            '${release.notes == null ? 'release notes on GitHub' : 'notes below'}',
+        'download & install',
+      ),
+      UpdateDownloading(:final fraction, :final snapshot) => (
+        'Downloading…',
+        fraction == null
+            ? '${_fmtSize(snapshot.bytesSoFar)} — total size unknown'
+            : '${(fraction * 100).round()}% of ${_fmtSize(snapshot.totalBytes)}',
+        null,
+      ),
+      UpdateReadyToInstall() => ('Ready', 'Handing it to the installer…', null),
+      UpdateNeedsInstallPermission() => (
+        'Install permission needed',
+        '"Install unknown apps" is off for the launcher — the exact '
+            'settings toggle was opened; grant it and retry',
+        'retry install',
+      ),
+      UpdateChecksumFailed() => (
+        'Checksum mismatch',
+        'The download failed the SHA-256 gate — nothing was installed. '
+            'Try again or grab the APK from the release page',
+        null,
+      ),
+      UpdateFailed(:final message) => ('Update check', message, 'check again'),
+    };
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: ToadType.hand(15, color: ink)),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: ToadType.inter(
+                        10.5,
+                        height: 1.3,
+                        color: ink.withValues(alpha: ink.a * 0.55),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (action != null)
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => _onAction(ctl, action),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 7,
+                    ),
+                    decoration: BoxDecoration(
+                      color: palette.accentWash,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      action,
+                      style: ToadType.hand(
+                        13,
+                        color: palette.accentInk,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          if (state is UpdateDownloading) ...[
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: LinearProgressIndicator(
+                value: (state as UpdateDownloading).fraction,
+                minHeight: 4,
+                backgroundColor: palette.hairline,
+                valueColor: AlwaysStoppedAnimation<Color>(palette.accent),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  void _onAction(UpdateEngine ctl, String action) {
+    if (action == 'check again') {
+      ctl.manualCheck();
+    } else if (action == 'download & install') {
+      ctl.download();
+    } else if (action == 'retry install') {
+      ctl.retryInstall();
+    }
+  }
+}
+
+String _fmtSize(int bytes) {
+  if (bytes <= 0) return 'unknown size';
+  if (bytes < 1024 * 1024) return '${(bytes / 1024).round()} kB';
+  return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+}
 
 class _SettingsScaffold extends StatelessWidget {
   const _SettingsScaffold({required this.title, required this.children});
@@ -690,6 +938,7 @@ class _SetRow extends StatelessWidget {
 }
 
 /// A settings row whose whole trailing side is a switch (gestures page).
+/// [onChanged] null disables the switch — the row then explains why.
 class _SwitchRow extends StatelessWidget {
   const _SwitchRow({
     required this.title,
@@ -705,7 +954,7 @@ class _SwitchRow extends StatelessWidget {
   final bool value;
   final Color accent;
   final Color ink;
-  final ValueChanged<bool> onChanged;
+  final ValueChanged<bool>? onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -731,7 +980,16 @@ class _SwitchRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 10),
-          ToadSwitch(value: value, accent: accent, onChanged: onChanged),
+          onChanged == null
+              ? Opacity(
+                  opacity: 0.45,
+                  child: ToadSwitch(
+                    value: value,
+                    accent: accent,
+                    onChanged: (_) {},
+                  ),
+                )
+              : ToadSwitch(value: value, accent: accent, onChanged: onChanged!),
         ],
       ),
     );

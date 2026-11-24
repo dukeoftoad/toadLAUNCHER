@@ -19,7 +19,7 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace = "family.toad.launcher"
-    compileSdk = 36
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -29,9 +29,9 @@ android {
 
     defaultConfig {
         applicationId = "family.toad.launcher"
-        // toadLAUNCHER design contract: minSdk 26, target API 36.
+        // toadLAUNCHER design contract: minSdk 26, target API 37.
         minSdk = 26
-        targetSdk = 36
+        targetSdk = 37
         // Uses the version code from pubspec.yaml. When using split APKs, 1000 * ABI_VERSION
         // is added automatically by Flutter. (https://developer.android.com/studio/build/configure-apk-splits#configure-APK-versions)
         // You can force using the value of versionCode by specifying the `-P force-version-code-ignoring-abi=true`

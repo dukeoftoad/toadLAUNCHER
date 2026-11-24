@@ -19,6 +19,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../core/models/models.dart';
 import '../../core/repositories/app_repository.dart';
+import '../../core/repositories/device_app_repository.dart';
 import '../../core/settings/launcher_settings.dart';
 import '../../core/theme/toad_theme.dart';
 import '../../core/theme/toad_tokens.dart';
@@ -73,22 +74,37 @@ class _PondHomeState extends ConsumerState<PondHome> {
       ref.read(toastProvider.notifier).show(message);
     }
 
+    final repo = ref.read(appRepositoryProvider);
+    final device = repo is DeviceAppRepository;
+
     setState(() {
       _menu = MenuRequest(
         context: MenuContext.pondApp,
         anchor: anchor,
         app: app,
         actions: MenuActions(
-          onAppInfo: () =>
-              toast('App info is a device feature — demo stays offline'),
+          onAppInfo: () {
+            if (device) {
+              repo.openAppDetails(app);
+            } else {
+              toast('App info is a device feature — demo stays offline');
+            }
+          },
           onWidgets: () => toast(
             'Widgets are placed from the sketchbook skins — the pond hosts '
             'them with its ambient loop',
           ),
           onShare: () =>
               toast('Share is a device feature — demo stays offline'),
-          onUninstall: () =>
-              toast('Uninstall needs a real device — demo keeps everything'),
+          onUninstall: () {
+            if (device) {
+              repo.uninstallApp(app);
+            } else {
+              toast(
+                'Uninstall needs a real device — demo keeps everything',
+              );
+            }
+          },
         ),
       );
     });

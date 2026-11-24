@@ -143,9 +143,12 @@ void main() {
     await openDrawer(tester);
 
     // Fling down on a recents tile (inside the header gesture zone) — a
-    // real velocity so primaryVelocity clears the 120 threshold.
+    // real velocity so primaryVelocity clears the 120 threshold. The
+    // drawer tree holds three "toadGALLERY" texts: the home icon behind
+    // the sheet, the recents tile, and the family-section row — `.at(1)`
+    // is the recents tile inside the header zone.
     await tester.fling(
-      find.text('toadGALLERY').last,
+      find.text('toadGALLERY').at(1),
       const Offset(0, 160),
       600,
     );

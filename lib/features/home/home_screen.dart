@@ -13,6 +13,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/models/models.dart';
+import '../../core/repositories/app_repository.dart';
+import '../../core/repositories/device_app_repository.dart';
 import '../../core/settings/launcher_settings.dart';
 import '../../core/theme/toad_theme.dart';
 import '../../core/theme/toad_tokens.dart';
@@ -234,6 +236,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     String? folderId,
   }) {
     final notifier = ref.read(homeLayoutProvider.notifier);
+    final repo = ref.read(appRepositoryProvider);
+    final device = repo is DeviceAppRepository;
 
     void removeFromPage() {
       final appId = app?.id ?? folder?.id;
@@ -251,7 +255,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return MenuActions(
       onAppInfo: () {
         _dismissMenu();
-        _toast('App info is a device feature — demo stays offline');
+        if (device && app != null) {
+          repo.openAppDetails(app);
+        } else {
+          _toast('App info is a device feature — demo stays offline');
+        }
       },
       onWidgets: _openWidgets,
       onShare: () {
@@ -260,7 +268,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       },
       onUninstall: () {
         _dismissMenu();
-        _toast('Uninstall needs a real device — demo keeps everything');
+        if (device && app != null) {
+          repo.uninstallApp(app); // the system dialog is the last word
+        } else {
+          _toast('Uninstall needs a real device — demo keeps everything');
+        }
       },
       onEditHome:
           variant == MenuContext.homeApp || variant == MenuContext.dockApp

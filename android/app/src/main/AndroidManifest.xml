@@ -1,12 +1,24 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!--
       toadLAUNCHER product promise: NO INTERNET permission, ever.
+      Update checks ride the SYSTEM download service (its process holds the
+      network — ours never asks for it).
       QUERY_ALL_PACKAGES is required to build the local app index (sideload-only app).
     -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"/>
-    <!-- Wallpaper picker entry (wallpaper & style, stage 3). -->
+    <!-- Wallpaper picker entry (wallpaper & style). -->
     <uses-permission android:name="android.permission.SET_WALLPAPER"/>
+    <!-- Device mode (v0.10): real uninstall through the system dialog. -->
+    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES"/>
+    <!-- Self-update: hands the downloaded APK to the system installer. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+    <!-- Opt-in only: system usage stats for the drawer recents row. The
+         special access is granted by the user in Settings; never nagged. -->
+    <uses-permission
+        android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions"/>
 
     <application
         android:label="toadLAUNCHER"
