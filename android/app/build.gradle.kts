@@ -44,7 +44,12 @@ android {
         create("release") {
             keyAlias = keystoreProperties["keyAlias"] as String?
             keyPassword = keystoreProperties["keyPassword"] as String?
-            storeFile = (keystoreProperties["storeFile"] as String?)?.let { file(it) }
+            storeFile = (keystoreProperties["storeFile"] as String?)?.let { fName ->
+                // Accept paths relative to android/app/ OR android/ — first one
+                // that exists wins (guards against the doubled app/app/ trap).
+                val fromAppDir = file(fName)
+                if (fromAppDir.exists()) fromAppDir else rootProject.file(fName)
+            }
             storePassword = keystoreProperties["storePassword"] as String?
         }
     }
