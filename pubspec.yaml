@@ -1,7 +1,7 @@
 name: toadlauncher
 description: "toadLAUNCHER — part of the toad family. Hand-made, calm, instant. Offline-first, no ads, no analytics, no network permission."
 publish_to: 'none'
-version: 0.1.0+1
+version: 0.9.0-beta+20
 
 environment:
   sdk: ^3.14.0

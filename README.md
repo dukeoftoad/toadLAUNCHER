@@ -6,7 +6,12 @@ network permission at all**.
 
 Built from the approved UI/UX design proposal v1.1 (14 mockups, 4 themes).
 
-## Status — Stage 4 of 4 complete (v0.1.0-alpha.1)
+## Status — v0.9.0-beta (first signed release)
+
+All four stages are implemented (see walkthroughs below). This release adds the
+**hand-crafted toad launcher icon** (paper-craft sticker, adaptive for Android
+8+, monochrome theming layer included) and a **committed release keystore** so
+every build installs over the previous one.
 
 | Stage | Scope | State |
 |---|---|---|
@@ -87,6 +92,41 @@ Built from the approved UI/UX design proposal v1.1 (14 mockups, 4 themes).
   Empty space shows the smaller trio: Wallpaper & style · Widgets · Home
   settings. Device-only actions say so honestly — demo mode never pretends.
 
+## Install the beta (signed APK)
+
+Grab `toadlauncher-v0.9.0-beta-universal-install.apk` from the latest GitHub
+**Release** page (or the `toadlauncher-release-apk` artifact of any run).
+
+1. **If an older CI build is installed, uninstall it first.** Builds made
+   before v0.9.0-beta were signed with a *random per-run debug keystore*, so
+   Android refused updates with "App not installed" — that was the install
+   bug; it is fixed from this release on.
+2. Allow *Install unknown apps* for your file manager / browser when asked.
+3. Requires **Android 8.0+** (minSdk 26). The APK is universal — every ABI.
+4. After install: Home → default launcher → **toadLAUNCHER**.
+5. Verify integrity (optional): the release ships a `.sha256` alongside the
+   APK.
+
+## Signing
+
+`android/app/toad-release.jks` + `android/key.properties` are **committed on
+purpose**: this is a personal, sideload-only project, and a fixed key is what
+makes updates installable. Alias `toadrelease`, passwords `toadlauncher`.
+Rotating the key means users must uninstall first — don't do it lightly.
+(If this repo ever goes public-wide, move the keystore to GitHub Secrets and
+strip it from history.)
+
+## Release process
+
+```bash
+git add -A && git commit -m "release: v0.9.0-beta"
+git tag v0.9.0-beta
+git push origin main --tags
+```
+
+CI runs analyze → test → signed universal APK, then publishes a GitHub
+Release named `toadLAUNCHER v0.9.0-beta` with the APK + sha256 attached.
+
 ## Verify locally
 
 ```bash
@@ -97,14 +137,11 @@ flutter run       # demo mode: the proposal's app set, no device needed
 
 ## Build an APK without a local Android SDK
 
-Push this folder to a GitHub repository and let the included workflow build
-it:
-
-1. `git init && git add . && git commit -m "toadLAUNCHER stage 1"`
-2. Create a GitHub repo, add it as origin and push.
-3. The workflow (`.github/workflows/ci.yml`) runs analyze → test → release
-   build and uploads `toadlauncher-release-apk` as an artifact.
-4. To push from a machine without stored credentials, create a fine-grained
+1. Push this folder to a GitHub repository and let the included workflow build
+   it (see *Release process* above, or just push `main` for a check run).
+2. The workflow (`.github/workflows/ci.yml`) runs analyze → test → signed
+   release build and uploads `toadlauncher-release-apk` as an artifact.
+3. To push from a machine without stored credentials, create a fine-grained
    PAT (repo: contents read/write) and use:
    `git remote add origin https://<TOKEN>@github.com/<user>/<repo>.git`
 
