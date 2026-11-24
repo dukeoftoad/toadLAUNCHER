@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="launch_paper">#F7F1E6</color>
+    <!-- Default (day) value for the night qualifier below. -->
+    <color name="launch_paper_night">#171613</color>
 </resources>
