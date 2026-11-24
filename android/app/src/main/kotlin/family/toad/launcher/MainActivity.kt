@@ -744,15 +744,20 @@ class MainActivity : FlutterActivity() {
      *  real AppWidgetHostView into [container]. */
     fun renderWidgetInto(container: FrameLayout, appWidgetId: Int?, providerId: String?) {
         val awm = AppWidgetManager.getInstance(this)
-        val info = appWidgetId?.let { awm.getAppWidgetInfo(it) }
-        val provider = info?.provider
-            ?: providerId?.let { ComponentName.unflattenFromString(it) }
-        if (appWidgetId == null || provider == null) {
+        val bound = appWidgetId?.let { awm.getAppWidgetInfo(it) }
+        // API 37 removed AppWidgetProviderInfo.packageName/name — resolve
+        // unbound-id fallbacks through the provider ComponentName.
+        val providerInfo = bound ?: providerId?.let { pid ->
+            ComponentName.unflattenFromString(pid)?.let { cn ->
+                awm.installedProviders.firstOrNull { it.provider == cn }
+            }
+        }
+        if (appWidgetId == null || providerInfo == null) {
             container.addView(placeholderView("Widget gone — remove and add again"))
             return
         }
         try {
-            val view = ensureWidgetHost().createView(this, appWidgetId, provider)
+            val view = ensureWidgetHost().createView(this, appWidgetId, providerInfo)
             view.setPadding(0, 0, 0, 0)
             container.addView(
                 view,
@@ -895,7 +900,7 @@ class MainActivity : FlutterActivity() {
             val query = LauncherApps.ShortcutQuery()
                 .setPackage(pkg)
                 .setQueryFlags(
-                    LauncherApps.ShortcutQuery.FLAG_MATCH_MANUAL or
+                    LauncherApps.ShortcutQuery.FLAG_MATCH_MANIFEST or
                         LauncherApps.ShortcutQuery.FLAG_MATCH_DYNAMIC,
                 )
             val shortcuts = la.getShortcuts(query, Process.myUserHandle()) ?: emptyList()
