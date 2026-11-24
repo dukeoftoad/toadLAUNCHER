@@ -18,6 +18,9 @@ import '../../core/settings/launcher_settings.dart';
 import '../../core/theme/toad_theme.dart';
 import '../../core/theme/toad_tokens.dart';
 import '../../shared/widgets/toad_app_icon.dart';
+import '../../shared/widgets/toad_toast.dart';
+import '../context_menu/app_context_menu.dart';
+import '../drawer/app_drawer.dart' show AppDrawer;
 import '../home/home_controller.dart';
 import '../home/widgets/app_grid.dart' show PageDots;
 import '../home/widgets/hero_zone.dart';
@@ -35,6 +38,9 @@ class PondHome extends ConsumerStatefulWidget {
 class _PondHomeState extends ConsumerState<PondHome> {
   late final PageController _pageController;
   final int _pageCount = 3;
+
+  /// Long-press menu raised from a lily pad (pondApp variant).
+  MenuRequest? _menu;
 
   @override
   void initState() {
@@ -54,6 +60,37 @@ class _PondHomeState extends ConsumerState<PondHome> {
     super.dispose();
   }
 
+  void _showPadMenu(AppEntry app, Offset anchor) {
+    void dismiss() => setState(() => _menu = null);
+    void toast(String message) {
+      dismiss();
+      ref.read(toastProvider.notifier).show(message);
+    }
+
+    setState(() {
+      _menu = MenuRequest(
+        context: MenuContext.pondApp,
+        anchor: anchor,
+        app: app,
+        actions: MenuActions(
+          onAppInfo: () => toast('App info is a device feature — demo stays offline'),
+          onWidgets: () => toast('Widget picker arrives in stage 3'),
+          onShare: () => toast('Share is a device feature — demo stays offline'),
+          onUninstall: () =>
+              toast('Uninstall needs a real device — demo keeps everything'),
+        ),
+      );
+    });
+  }
+
+  void _closeTopOverlay() {
+    if (_menu != null) {
+      setState(() => _menu = null);
+    } else if (ref.read(drawerOpenProvider)) {
+      ref.read(drawerOpenProvider.notifier).close();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final skin = ToadTheme.of(context);
@@ -62,104 +99,157 @@ class _PondHomeState extends ConsumerState<PondHome> {
     final now = ref.watch(clockProvider).value ?? DateTime.now();
     final layoutAsync = ref.watch(homeLayoutProvider);
     final repo = ref.watch(appRepositoryProvider);
+    final drawerOpen = ref.watch(drawerOpenProvider);
 
     final hero = buildHeroData(now, pond: true, pondNight: pond.isNight);
 
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness:
-            pond.isNight ? Brightness.light : Brightness.dark,
-        systemNavigationBarColor: Colors.transparent,
-        systemNavigationBarIconBrightness:
-            pond.isNight ? Brightness.light : Brightness.dark,
-      ),
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        body: Stack(
-          fit: StackFit.expand,
-          children: [
-            // Scene background (one painter).
-            CustomPaint(painter: PondScenePainter(palette: pond)),
+    ref.listen<String?>(toastProvider, (prev, message) {
+      if (message == null || message == prev) return;
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(toadToast(context, message));
+      ref.read(toastProvider.notifier).consume();
+    });
 
-            // Live widgets layer.
-            SafeArea(
-              bottom: false,
-              child: Column(
-                children: [
-                  HeroZone(data: hero),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        if (_menu != null || ref.read(drawerOpenProvider)) _closeTopOverlay();
+      },
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness:
+              pond.isNight ? Brightness.light : Brightness.dark,
+          systemNavigationBarColor: Colors.transparent,
+          systemNavigationBarIconBrightness:
+              pond.isNight ? Brightness.light : Brightness.dark,
+        ),
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          body: Stack(
+            fit: StackFit.expand,
+            children: [
+              // Scene background (one painter).
+              CustomPaint(painter: PondScenePainter(palette: pond)),
 
-                  // The clock's shimmering reflection.
-                  _ClockReflection(
-                    time: hero.time,
-                    opacity: pond.reflectionOpacity,
-                    color: pond.clockLabel,
-                  ),
+              // Live widgets layer.
+              SafeArea(
+                bottom: false,
+                child: GestureDetector(
+                  // "The drawer swipe-up gesture starts on the log."
+                  onVerticalDragEnd: (details) {
+                    final v = details.primaryVelocity ?? 0;
+                    if (settings.swipeUpDrawer &&
+                        v < -320 &&
+                        !drawerOpen &&
+                        _menu == null) {
+                      ref.read(drawerOpenProvider.notifier).open();
+                    }
+                  },
+                  child: Column(
+                    children: [
+                      HeroZone(data: hero),
 
-                  const SizedBox(height: 18),
+                      // The clock's shimmering reflection.
+                      _ClockReflection(
+                        time: hero.time,
+                        opacity: pond.reflectionOpacity,
+                        color: pond.clockLabel,
+                      ),
 
-                  // Lily-pad rows (static; bob animation stage 4).
-                  layoutAsync.maybeWhen(
-                    data: (layout) => Expanded(
-                      child: FutureBuilder<List<List<AppEntry>>>(
-                        future: repo.loadPondRows(),
-                        builder: (context, snapshot) {
-                          final rows =
-                              snapshot.data ?? const <List<AppEntry>>[];
-                          return PageView.builder(
-                            controller: _pageController,
-                            itemCount: _pageCount,
-                            itemBuilder: (context, pageIndex) {
-                              final apps = pageIndex == 0
-                                  ? rows
-                                  : _chunk(
-                                      layout.pages.elementAtOrNull(pageIndex),
-                                      3,
-                                    );
-                              return _PondRows(
-                                rows: apps,
-                                pond: pond,
-                                iconShape: settings.iconShape,
-                                onAppTap: (app) => ref
-                                    .read(homeLayoutProvider.notifier)
-                                    .launch(app),
+                      const SizedBox(height: 18),
+
+                      // Lily-pad rows (static; bob animation stage 4).
+                      layoutAsync.maybeWhen(
+                        data: (layout) => Expanded(
+                          child: FutureBuilder<List<List<AppEntry>>>(
+                            future: repo.loadPondRows(),
+                            builder: (context, snapshot) {
+                              final rows =
+                                  snapshot.data ?? const <List<AppEntry>>[];
+                              return PageView.builder(
+                                controller: _pageController,
+                                itemCount: _pageCount,
+                                itemBuilder: (context, pageIndex) {
+                                  final apps = pageIndex == 0
+                                      ? rows
+                                      : _chunk(
+                                          _flatPondApps(
+                                            layout,
+                                            pageIndex,
+                                          ),
+                                          3,
+                                        );
+                                  return _PondRows(
+                                    rows: apps,
+                                    pond: pond,
+                                    iconShape: settings.iconShape,
+                                    onAppTap: (app) => ref
+                                        .read(homeLayoutProvider.notifier)
+                                        .launch(app),
+                                    onAppLongPress: _showPadMenu,
+                                  );
+                                },
                               );
                             },
-                          );
-                        },
+                          ),
+                        ),
+                        orElse: () => const Spacer(),
                       ),
-                    ),
-                    orElse: () => const Spacer(),
-                  ),
 
-                  // Page dots become firefly embers (glow at night).
-                  PageDots(
-                    count: _pageCount,
-                    activeIndex: ref.watch(currentPageProvider),
-                    dotColor: pond.isNight
-                        ? pond.firefly.withValues(alpha: 0.85)
-                        : pond.ink,
-                  ),
+                      // Page dots become firefly embers (glow at night).
+                      PageDots(
+                        count: _pageCount,
+                        activeIndex: ref.watch(currentPageProvider),
+                        dotColor: pond.isNight
+                            ? pond.firefly.withValues(alpha: 0.85)
+                            : pond.ink,
+                      ),
 
-                  // Log dock.
-                  _LogDock(
-                    apps: layoutAsync.maybeWhen(
-                      data: (l) => l.dock,
-                      orElse: () => const [],
-                    ),
-                    iconShape: settings.iconShape,
-                    pond: pond,
-                    onAppTap: (app) =>
-                        ref.read(homeLayoutProvider.notifier).launch(app),
-                    onDrawerTap: () {}, // Mouth drawer arrives in stage 4.
+                      // Log dock.
+                      _LogDock(
+                        apps: layoutAsync.maybeWhen(
+                          data: (l) => l.dock,
+                          orElse: () => const [],
+                        ),
+                        iconShape: settings.iconShape,
+                        pond: pond,
+                        onAppTap: (app) =>
+                            ref.read(homeLayoutProvider.notifier).launch(app),
+                        onDrawerTap: () =>
+                            ref.read(drawerOpenProvider.notifier).open(),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
-            ),
-          ],
+
+              // ---- Drawer (screen 4 over the pond) ----
+              if (drawerOpen) const AppDrawer(),
+
+              // ---- Long-press menu ----
+              if (_menu != null)
+                ContextMenuLayer(
+                  request: _menu!,
+                  onDismissed: () => setState(() => _menu = null),
+                ),
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  /// Pond pages 2+ reuse the sketchbook pages' plain apps (folders stay
+  /// home-only in this stage).
+  List<AppEntry> _flatPondApps(HomeLayout layout, int pageIndex) {
+    final page = layout.pages.elementAtOrNull(pageIndex) ?? const <HomeCell>[];
+    return [
+      for (final cell in page)
+        if (cell is AppCell) cell.app,
+    ];
   }
 }
 
@@ -179,12 +269,14 @@ class _PondRows extends StatelessWidget {
     required this.pond,
     required this.iconShape,
     required this.onAppTap,
+    required this.onAppLongPress,
   });
 
   final List<List<AppEntry>> rows;
   final PondPalette pond;
   final IconShape iconShape;
   final void Function(AppEntry) onAppTap;
+  final void Function(AppEntry app, Offset anchor) onAppLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -206,6 +298,8 @@ class _PondRows extends StatelessWidget {
                           pond: pond,
                           iconShape: iconShape,
                           onTap: () => onAppTap(rows[r][c]),
+                          onLongPress: (anchor) =>
+                              onAppLongPress(rows[r][c], anchor),
                         ),
                 ],
               ],
@@ -223,18 +317,21 @@ class _PadCell extends StatelessWidget {
     required this.pond,
     required this.iconShape,
     required this.onTap,
+    required this.onLongPress,
   });
 
   final AppEntry app;
   final PondPalette pond;
   final IconShape iconShape;
   final VoidCallback onTap;
+  final void Function(Offset anchor) onLongPress;
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
+      onLongPressStart: (details) => onLongPress(details.globalPosition),
       child: SizedBox(
         width: ToadMetrics.pondCellWidth,
         child: Column(

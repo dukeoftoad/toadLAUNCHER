@@ -6,20 +6,36 @@ network permission at all**.
 
 Built from the approved UI/UX design proposal v1.1 (14 mockups, 4 themes).
 
-## Status — Stage 1 of 4 complete
+## Status — Stage 2 of 4 complete
 
 | Stage | Scope | State |
 |---|---|---|
 | 1 (M1) | Theme engine (4 skins), home screen, hero clock, memories card, app grid, page dots, dock, static Pond home | **done** |
-| 2 (M2a) | A–Z drawer + search + recents, folders (shared-axis open), long-press menus | pending |
+| 2 (M2a) | A–Z drawer + search + recents, folders (shared-axis open, inline rename), long-press menus with two-step uninstall | **done** |
 | 3 (M2b/M3) | Edit mode with honest snapping, widget picker, wallpaper & style, settings hub + gestures, motion polish | pending |
 | 4 (M4) | Pond ambient loop (ripple/blink/croak/hop/flyby/fireflies/rain), mouth drawer, Calm-pond + battery guards | pending |
+
+## Stage 2 walkthrough (demo mode)
+
+- **Drawer** — swipe up anywhere (or tap the dock chevron / the log's APPS
+  handle). Frosted-paper sheet over the home: sticky search pill, recents row
+  (last 4 launches, updated live), Caveat-lettered A–Z index, local badges.
+  Search filters instantly; swipe-down on the header, back, or Esc closes.
+- **Folders** — page 2 leads with the *Media* tile (2x2 mini preview). Tapping
+  opens the card with 240 ms shared-axis motion from the tile's rect over a
+  dimmed, 6 px-blurred home. Tap the Caveat title to rename inline; more than
+  9 apps paginate with home-style dots.
+- **Long-press menus** — icons raise a 180 ms scale-in popover beside them
+  (app info / widgets / share / remove / uninstall…). Remove takes the icon
+  off that page only; Uninstall is danger-colored and always asks twice.
+  Empty space shows the smaller trio: Wallpaper & style · Widgets · Home
+  settings. Device-only actions say so honestly — demo mode never pretends.
 
 ## Verify locally
 
 ```bash
 flutter analyze   # zero issues
-flutter test      # 31 tests
+flutter test      # 47 tests
 flutter run       # demo mode: the proposal's app set, no device needed
 ```
 

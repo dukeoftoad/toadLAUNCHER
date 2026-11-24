@@ -72,6 +72,26 @@ class DemoAppRepository implements AppRepository {
     AppEntry(id: 'camera', name: 'Camera', glyph: '◉', gradientIndex: 3),
   ];
 
+  /// The Media folder — screen 5. Lives as a tile on home page 2.
+  static const FolderData _mediaFolder = FolderData(
+    id: 'media',
+    title: 'Media',
+    apps: [
+      _toadGallery,
+      AppEntry(id: 'youtube', name: 'YouTube', glyph: '▶', gradientIndex: 2),
+      AppEntry(id: 'camera', name: 'Camera', glyph: '◉', gradientIndex: 3),
+      AppEntry(id: 'music', name: 'Music', glyph: '♪', gradientIndex: 6),
+      AppEntry(
+          id: 'family.toad.player',
+          name: 'toadPLAYER',
+          glyph: '',
+          isFamilyToad: true),
+      AppEntry(id: 'recorder', name: 'Recorder', glyph: '◉', gradientIndex: 6),
+      AppEntry(id: 'files', name: 'Files', glyph: '▤', gradientIndex: 7),
+      AppEntry(id: 'casts', name: 'Casts', glyph: '↗', gradientIndex: 4),
+    ],
+  );
+
   /// Drawer demo set — A–Z with the Contacts badge from screen 4.
   static const List<AppEntry> _drawerApps = [
     AppEntry(id: 'alarm', name: 'Alarm', glyph: '⏰', gradientIndex: 2),
@@ -111,7 +131,15 @@ class DemoAppRepository implements AppRepository {
       ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
     return HomeLayout(
-      pages: const [_page1, _page2, _page3],
+      pages: [
+        [for (final a in _page1) AppCell(a)],
+        // The Media folder tile leads page 2 (folder screens, stage 2).
+        [
+          const FolderCell(_mediaFolder),
+          for (final a in _page2) AppCell(a),
+        ],
+        [for (final a in _page3) AppCell(a)],
+      ],
       dock: _dock,
       recents: const [
         _toadGallery,
@@ -120,26 +148,7 @@ class DemoAppRepository implements AppRepository {
         AppEntry(id: 'camera', name: 'Camera', glyph: '◉', gradientIndex: 3),
       ],
       allApps: all,
-      folders: const [
-        FolderData(
-          id: 'media',
-          title: 'Media',
-          apps: [
-            _toadGallery,
-            AppEntry(id: 'youtube', name: 'YouTube', glyph: '▶', gradientIndex: 2),
-            AppEntry(id: 'camera', name: 'Camera', glyph: '◉', gradientIndex: 3),
-            AppEntry(id: 'music', name: 'Music', glyph: '♪', gradientIndex: 6),
-            AppEntry(
-                id: 'family.toad.player',
-                name: 'toadPLAYER',
-                glyph: '',
-                isFamilyToad: true),
-            AppEntry(id: 'recorder', name: 'Recorder', glyph: '◉', gradientIndex: 6),
-            AppEntry(id: 'files', name: 'Files', glyph: '▤', gradientIndex: 7),
-            AppEntry(id: 'casts', name: 'Casts', glyph: '↗', gradientIndex: 4),
-          ],
-        ),
-      ],
+      folders: const [_mediaFolder],
       memory: MemoryCardData(
         title: 'On this day',
         meta: '3 photos · 2025',

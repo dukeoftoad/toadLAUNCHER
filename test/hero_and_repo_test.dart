@@ -2,6 +2,7 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:toadlauncher/core/models/models.dart';
 import 'package:toadlauncher/core/repositories/app_repository.dart';
 import 'package:toadlauncher/features/home/widgets/hero_zone.dart';
 
@@ -87,8 +88,17 @@ void main() {
       expect(layout.pages.length, 3);
       expect(layout.pages.first.length, 8);
       expect(layout.dock.length, 4);
-      expect(layout.pages.first.first.id, 'family.toad.gallery');
+      final first = layout.pages.first.first;
+      expect(first, isA<AppCell>());
+      expect((first as AppCell).app.id, 'family.toad.gallery');
       expect(layout.memory.title, 'On this day');
+    });
+
+    test('page 2 leads with the Media folder tile (stage 2)', () async {
+      final layout = await repo.loadHomeLayout();
+      final lead = layout.pages[1].first;
+      expect(lead, isA<FolderCell>());
+      expect((lead as FolderCell).folder.id, 'media');
     });
 
     test('drawer index is alphabetically sorted', () async {
