@@ -356,34 +356,81 @@ void main() {
     expect(find.text('WALLPAPER'), findsOneWidget);
     expect(find.text('sage paper'), findsOneWidget);
 
-    // Theme mode → Dark, live.
+    // Theme mode → Dark, live (scroll — the pond pack rows sit above it).
+    await tester.scrollUntilVisible(
+      find.text('Dark'),
+      120,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pump(const Duration(milliseconds: 200));
     await tester.tap(find.text('Dark'));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 200));
     expect(container.read(launcherSettingsProvider).skinMode, SkinMode.dark);
 
-    // Wallpaper thumb → gold.
+    // Wallpaper thumb → gold (scroll back up).
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('paper-1')),
+      -120,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pump(const Duration(milliseconds: 200));
     await tester.tap(find.byKey(const ValueKey('paper-1')));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 200));
     expect(container.read(launcherSettingsProvider).wallpaperIndex, 1);
-    expect(find.text('gold paper'), findsOneWidget);
+    // The hero banner lives at the top of the (lazy) ListView — assert its
+    // label through the scope instead of the tree.
 
     // Accent → clay, live re-tint.
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('accent-clay')),
+      120,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pump(const Duration(milliseconds: 200));
     await tester.tap(find.byKey(const ValueKey('accent-clay')));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 200));
     expect(container.read(launcherSettingsProvider).accent, AccentOption.clay);
 
     // Icon shape → circle.
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('shape-circle')),
+      120,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pump(const Duration(milliseconds: 200));
     await tester.tap(find.byKey(const ValueKey('shape-circle')));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 200));
     expect(
       container.read(launcherSettingsProvider).iconShape,
       IconShape.circle,
     );
 
-    // Pond Pro switch flips the whole home into the scene skin.
+    // Pond Pro switch flips the whole home into the scene skin (the pond's
+    // ambient loop keeps running below, so pump fixed steps, never settle).
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('switch-pond')),
+      -120,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pump(const Duration(milliseconds: 200));
     await tester.tap(find.byType(ToadSwitch).first);
-    await tester.pumpAndSettle(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pump(const Duration(milliseconds: 400));
     expect(container.read(launcherSettingsProvider).pondPro, isTrue);
+
+    // The pond pack rows — rain, calm, battery guard — all live here.
+    await tester.scrollUntilVisible(
+      find.text('Calm pond'),
+      120,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.text('Rain shower'), findsOneWidget);
+    expect(find.text('Calm pond'), findsOneWidget);
+    expect(find.text('Battery guard'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('switch-calm')));
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(container.read(launcherSettingsProvider).calmPond, isTrue);
   });
 
   testWidgets('settings hub: honest subtitles + gestures apply live', (

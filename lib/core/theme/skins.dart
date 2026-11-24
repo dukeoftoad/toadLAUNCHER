@@ -23,7 +23,10 @@ extension ResolvedSkinX on ResolvedSkin {
 /// Resolve the effective skin from settings + system brightness + clock.
 ///
 /// Day/night on Pond Pro is clock-driven only: after the sunset anchor
-/// (default 19:30) until the sunrise anchor (default 6:30).
+/// (default 19:30) until the sunrise anchor (default 6:30). Calm pond
+/// (or an active battery guard on device) short-circuits the clock:
+/// "night falls instantly and the whole loop freezes into a still
+/// painting".
 ResolvedSkin resolveSkin({
   required SkinMode mode,
   required bool pondPro,
@@ -33,8 +36,10 @@ ResolvedSkin resolveSkin({
   required int sunsetMinute,
   required int sunriseHour,
   required int sunriseMinute,
+  bool pondCalm = false,
 }) {
   if (pondPro) {
+    if (pondCalm) return ResolvedSkin.pondNight;
     final minutes = now.hour * 60 + now.minute;
     final sunset = sunsetHour * 60 + sunsetMinute;
     final sunrise = sunriseHour * 60 + sunriseMinute;

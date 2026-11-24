@@ -28,7 +28,9 @@ Future<void> pumpHome(WidgetTester tester, {bool pondPro = false}) async {
       ),
     ),
   );
-  await tester.pumpAndSettle(const Duration(seconds: 1));
+  // The pond's ambient loop never settles — pump fixed steps instead.
+  await tester.pump();
+  await tester.pump(const Duration(seconds: 1));
 }
 
 /// Open the drawer through the dock handle.
@@ -69,14 +71,42 @@ void main() {
     },
   );
 
-  testWidgets('drawer also opens over Pond Pro and shows the wash', (
+  testWidgets('pond opens the mouth drawer: tongue search, grid, swallow', (
     tester,
   ) async {
     await pumpHome(tester, pondPro: true);
-    await openDrawer(tester);
+    await tester.pump(const Duration(milliseconds: 400));
 
-    expect(find.text('Search apps'), findsOneWidget);
-    expect(find.text('the resident'), findsOneWidget); // pond still behind
+    // On the pond this opens the maw (openDrawer settles forever there).
+    await tester.tap(find.text('APPS'));
+    await tester.pump(const Duration(milliseconds: 500)); // mount + forward
+    await tester.pump(const Duration(milliseconds: 380)); // tick 1 (anchor)
+    await tester.pump(const Duration(milliseconds: 380)); // open completes
+
+    // The maw is seated: tongue search, showcase grid, A-Z rail.
+    expect(find.text('what fly do you seek?'), findsOneWidget);
+    expect(find.text('Phone'), findsWidgets); // dock + maw grid
+    expect(find.text('A'), findsOneWidget); // rail letters
+    // The drag hint retires once the mouth is fully open.
+    expect(
+      find.text('pull up to open wider · release to swallow'),
+      findsNothing,
+    );
+
+    // Tongue search filters the showcase grid.
+    await tester.enterText(find.byType(TextField), 'clo');
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Clock'), findsWidgets); // maw result
+    expect(find.text('Alarm'), findsNothing);
+
+    // Drag the mouth mostly shut and release below 40% — it swallows
+    // (260 ms) with the gulp bounce, exactly like the proposal's drawer.
+    await tester.dragFrom(const Offset(60, 80), const Offset(0, 340));
+    await tester.pump(const Duration(milliseconds: 100)); // release → swallow
+    await tester.pump(const Duration(milliseconds: 260)); // anchor tick
+    await tester.pump(const Duration(milliseconds: 260)); // shut + unmount
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('what fly do you seek?'), findsNothing);
   });
 
   testWidgets('search filters instantly and restores on clear', (tester) async {

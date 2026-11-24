@@ -6,14 +6,41 @@ network permission at all**.
 
 Built from the approved UI/UX design proposal v1.1 (14 mockups, 4 themes).
 
-## Status — Stage 3 of 4 complete
+## Status — Stage 4 of 4 complete (v0.1.0-alpha.1)
 
 | Stage | Scope | State |
 |---|---|---|
 | 1 (M1) | Theme engine (4 skins), home screen, hero clock, memories card, app grid, page dots, dock, static Pond home | **done** |
 | 2 (M2a) | A–Z drawer + search + recents, folders (shared-axis open, inline rename), long-press menus with two-step uninstall | **done** |
 | 3 (M2b/M3) | Edit mode with honest snapping, widget picker, wallpaper & style, settings hub + gestures | **done** |
-| 4 (M4) | Pond ambient loop (ripple/blink/croak/hop/flyby/fireflies/rain), mouth drawer, Calm-pond + battery guards | pending |
+| 4 (M4) | Pond ambient loop, mouth drawer, Calm-pond + battery guard | **done** |
+
+## Stage 4 walkthrough (the pond comes alive)
+
+- **Ambient loop** — one shared clock, repaint-only (no widget rebuilds):
+  ripple idle (4.4 s, 3 concurrent), rising bubbles, pad bob (4.8 s,
+  phase-offset), toad bob (5.4 s, slower asleep), reed sway (5.6 s, ±1.7°),
+  blink (two-frame 180 ms, random 5–8 s), glitter shimmer, the dragonfly
+  flyby (every 45–90 s · 2.4 s crossing with a mid-air hover), night
+  fireflies (5 dots, 7.5 s drift + 2.3 s flicker), and the manual rain
+  shower (1.1 s drops, ripple density ×3, sky dim). Ripple amplitude halves
+  at night — "the pond is quieter when you are". Day→night crossfades over
+  2 s on the clock anchors.
+- **The resident** — blinks on schedule; tap him and he croaks (900 ms
+  throat puff + floating ♪); at night he sleeps with drifting z's, and
+  tapping him wakes him with a grumpy, flat-mouthed croak. Long-pressing a
+  pad hops (320 ms arc with squash-and-stretch).
+- **The mouth drawer** (screen 13) — swiping up on the pond, the drawer is
+  the toad: bulging eyes peek over the jaw and blink while you browse, the
+  tongue is the search bar ("what fly do you seek?"), a 4-column showcase
+  grid scrolls inside the deep-moss interior, and the A–Z rail hugs the
+  jaw's right edge. It tracks your finger 0→100%; release below 40% and it
+  swallows shut (260 ms) with a gulp bounce and a satisfied blink; pull
+  past the top and it hiccups a bubble.
+- **Calm pond + battery guard** — Calm-pond (or an active battery saver on
+  device) falls night instantly and freezes the whole loop into a still
+  painting — zero animation cost. The demo never fakes a battery read:
+  the guard is honored once device mode ships.
 
 ## Stage 3 walkthrough (demo mode)
 
@@ -64,7 +91,7 @@ Built from the approved UI/UX design proposal v1.1 (14 mockups, 4 themes).
 
 ```bash
 flutter analyze   # zero issues
-flutter test      # 60 tests
+flutter test      # 67 tests
 flutter run       # demo mode: the proposal's app set, no device needed
 ```
 

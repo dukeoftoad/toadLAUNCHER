@@ -65,6 +65,7 @@ class LauncherSettings {
     this.badges = false,
     this.calmPond = false,
     this.pondRain = false,
+    this.batteryGuard = true,
     this.sunsetHour = 19,
     this.sunsetMinute = 30,
     this.sunriseHour = 6,
@@ -102,6 +103,11 @@ class LauncherSettings {
   // Pond pack.
   final bool calmPond; // freezes ambient loop (accessibility)
   final bool pondRain; // manual weather toggle — never a weather feed
+
+  /// Battery guard — when battery saver is ACTIVE on device, night falls
+  /// instantly and the loop freezes. The demo never reads a battery, so
+  /// this flag is honored once device mode ships; off never nags.
+  final bool batteryGuard;
 
   // Day/night anchors (clock-driven, never location).
   final int sunsetHour;
@@ -143,6 +149,7 @@ class LauncherSettings {
     bool? badges,
     bool? calmPond,
     bool? pondRain,
+    bool? batteryGuard,
     int? sunsetHour,
     int? sunsetMinute,
     int? sunriseHour,
@@ -172,6 +179,7 @@ class LauncherSettings {
       badges: badges ?? this.badges,
       calmPond: calmPond ?? this.calmPond,
       pondRain: pondRain ?? this.pondRain,
+      batteryGuard: batteryGuard ?? this.batteryGuard,
       sunsetHour: sunsetHour ?? this.sunsetHour,
       sunsetMinute: sunsetMinute ?? this.sunsetMinute,
       sunriseHour: sunriseHour ?? this.sunriseHour,
@@ -202,6 +210,7 @@ class LauncherSettings {
     'badges': badges,
     'calmPond': calmPond,
     'pondRain': pondRain,
+    'batteryGuard': batteryGuard,
     'sunsetHour': sunsetHour,
     'sunsetMinute': sunsetMinute,
     'sunriseHour': sunriseHour,
@@ -232,6 +241,7 @@ class LauncherSettings {
       badges: (json['badges'] as bool?) ?? false,
       calmPond: (json['calmPond'] as bool?) ?? false,
       pondRain: (json['pondRain'] as bool?) ?? false,
+      batteryGuard: (json['batteryGuard'] as bool?) ?? true,
       sunsetHour: (json['sunsetHour'] as int?) ?? 19,
       sunsetMinute: (json['sunsetMinute'] as int?) ?? 30,
       sunriseHour: (json['sunriseHour'] as int?) ?? 6,
@@ -292,6 +302,7 @@ class LauncherSettingsController extends Notifier<LauncherSettings> {
       patch(state.copyWith(showMemoriesCard: v));
   void setCalmPond(bool v) => patch(state.copyWith(calmPond: v));
   void setPondRain(bool v) => patch(state.copyWith(pondRain: v));
+  void setBatteryGuard(bool v) => patch(state.copyWith(batteryGuard: v));
   void setWallpaperIndex(int i) =>
       patch(state.copyWith(wallpaperIndex: i.clamp(0, 6)));
   void setClockSpan({int? w, int? h}) => patch(

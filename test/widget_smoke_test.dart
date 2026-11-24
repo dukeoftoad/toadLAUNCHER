@@ -51,7 +51,9 @@ void main() {
 
   testWidgets('pond home paints the resident label', (tester) async {
     await pumpHome(tester, pondPro: true);
-    await tester.pumpAndSettle(const Duration(seconds: 1));
+    // The ambient loop never settles — pump fixed steps instead.
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump(const Duration(milliseconds: 600));
 
     expect(find.text('the resident'), findsOneWidget);
     expect(find.text('APPS'), findsOneWidget); // dock handle

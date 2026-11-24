@@ -1,13 +1,18 @@
-/// Pond home — Pond Pro scene skin (screens 11 & 12).
+/// Pond home — Pond Pro scene skin (screens 11 & 12) with the full M4
+/// ambient loop.
 ///
-/// The whole scene is one CustomPainter; icons, labels and widgets are real
-/// composited widgets, so hit-testing and accessibility never change.
-/// Static build for stage 1 — ambient loop (bob/croak/ripple) lands in
-/// stage 4 per the milestone plan.
+/// The scene painters repaint through the shared ambient clock (no widget
+/// rebuilds); pad bob and toad bob are transform-only compositor moves; the
+/// resident blinks, croaks when tapped (grumpily at night), and swiping up
+/// opens the mouth showcase drawer — "the drawer is the toad".
+/// Calm pond (or an active battery guard on device) freezes the loop into
+/// a still painting.
 library;
 
+import 'dart:math' as math;
 import 'dart:ui' show ImageFilter;
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart' show SystemUiOverlayStyle;
 import 'package:material_ui/material_ui.dart';
@@ -20,11 +25,12 @@ import '../../core/theme/toad_tokens.dart';
 import '../../shared/widgets/toad_app_icon.dart';
 import '../../shared/widgets/toad_toast.dart';
 import '../context_menu/app_context_menu.dart';
-import '../drawer/app_drawer.dart' show AppDrawer;
 import '../home/home_controller.dart';
 import '../home/widgets/app_grid.dart' show PageDots;
 import '../home/widgets/hero_zone.dart';
 import 'lily_pad_painter.dart';
+import 'mouth_drawer.dart' show MouthDrawer;
+import 'pond_ambient.dart';
 import 'pond_scene_painter.dart';
 import 'resident_toad_painter.dart';
 
@@ -135,111 +141,132 @@ class _PondHomeState extends ConsumerState<PondHome> {
         ),
         child: Scaffold(
           backgroundColor: Colors.transparent,
-          body: Stack(
-            fit: StackFit.expand,
-            children: [
-              // Scene background (one painter).
-              CustomPaint(painter: PondScenePainter(palette: pond)),
-
-              // Live widgets layer.
-              SafeArea(
-                bottom: false,
-                child: GestureDetector(
-                  // "The drawer swipe-up gesture starts on the log."
-                  onVerticalDragEnd: (details) {
-                    final v = details.primaryVelocity ?? 0;
-                    if (settings.swipeUpDrawer &&
-                        v < -320 &&
-                        !drawerOpen &&
-                        _menu == null) {
-                      ref.read(drawerOpenProvider.notifier).open();
-                    }
-                  },
-                  child: Column(
-                    children: [
-                      HeroZone(data: hero),
-
-                      // The clock's shimmering reflection.
-                      _ClockReflection(
-                        time: hero.time,
-                        opacity: pond.reflectionOpacity,
-                        color: pond.clockLabel,
+          // The pond is the one screen that must never freeze silently:
+          // ambient loop + mouth drawer own their tickers.
+          body: TickerMode(
+            enabled: true,
+            child: PondAmbient(
+              builder: (context, elapsed) => Stack(
+                fit: StackFit.expand,
+                children: [
+                  // Scene background — repaints off the ambient clock; the
+                  // day→night hand-off crossfades over 2 s.
+                  AnimatedSwitcher(
+                    duration: ToadMotion.dayNightCrossfade,
+                    child: CustomPaint(
+                      key: ValueKey(pond.isNight),
+                      painter: PondScenePainter(
+                        palette: pond,
+                        clock: elapsed,
+                        rain: settings.pondRain,
                       ),
+                    ),
+                  ),
 
-                      const SizedBox(height: 18),
+                  // Live widgets layer.
+                  SafeArea(
+                    bottom: false,
+                    child: GestureDetector(
+                      // "Swipe up on the log — the drawer is the toad."
+                      onVerticalDragEnd: (details) {
+                        final v = details.primaryVelocity ?? 0;
+                        if (settings.swipeUpDrawer &&
+                            v < -320 &&
+                            !drawerOpen &&
+                            _menu == null) {
+                          ref.read(drawerOpenProvider.notifier).open();
+                        }
+                      },
+                      child: Column(
+                        children: [
+                          HeroZone(data: hero),
 
-                      // Lily-pad rows (static; bob animation stage 4).
-                      layoutAsync.maybeWhen(
-                        data: (layout) => Expanded(
-                          child: FutureBuilder<List<List<AppEntry>>>(
-                            future: repo.loadPondRows(),
-                            builder: (context, snapshot) {
-                              final rows =
-                                  snapshot.data ?? const <List<AppEntry>>[];
-                              return PageView.builder(
-                                controller: _pageController,
-                                itemCount: _pageCount,
-                                itemBuilder: (context, pageIndex) {
-                                  final apps = pageIndex == 0
-                                      ? rows
-                                      : _chunk(
-                                          _flatPondApps(layout, pageIndex),
-                                          3,
-                                        );
-                                  return _PondRows(
-                                    rows: apps,
-                                    pond: pond,
-                                    iconShape: settings.iconShape,
-                                    onAppTap: (app) => ref
-                                        .read(homeLayoutProvider.notifier)
-                                        .launch(app),
-                                    onAppLongPress: _showPadMenu,
+                          // The clock's shimmering reflection.
+                          _ClockReflection(
+                            time: hero.time,
+                            opacity: pond.reflectionOpacity,
+                            color: pond.clockLabel,
+                          ),
+
+                          const SizedBox(height: 18),
+
+                          // Lily-pad rows — the bob rides the ambient clock.
+                          layoutAsync.maybeWhen(
+                            data: (layout) => Expanded(
+                              child: FutureBuilder<List<List<AppEntry>>>(
+                                future: repo.loadPondRows(),
+                                builder: (context, snapshot) {
+                                  final rows =
+                                      snapshot.data ?? const <List<AppEntry>>[];
+                                  return PageView.builder(
+                                    controller: _pageController,
+                                    itemCount: _pageCount,
+                                    itemBuilder: (context, pageIndex) {
+                                      final apps = pageIndex == 0
+                                          ? rows
+                                          : _chunk(
+                                              _flatPondApps(layout, pageIndex),
+                                              3,
+                                            );
+                                      return _PondRows(
+                                        rows: apps,
+                                        pond: pond,
+                                        elapsed: elapsed,
+                                        iconShape: settings.iconShape,
+                                        onAppTap: (app) => ref
+                                            .read(homeLayoutProvider.notifier)
+                                            .launch(app),
+                                        onAppLongPress: _showPadMenu,
+                                      );
+                                    },
                                   );
                                 },
-                              );
-                            },
+                              ),
+                            ),
+                            orElse: () => const Spacer(),
                           ),
-                        ),
-                        orElse: () => const Spacer(),
-                      ),
 
-                      // Page dots become firefly embers (glow at night).
-                      PageDots(
-                        count: _pageCount,
-                        activeIndex: ref.watch(currentPageProvider),
-                        dotColor: pond.isNight
-                            ? pond.firefly.withValues(alpha: 0.85)
-                            : pond.ink,
-                      ),
+                          // Page dots become firefly embers (glow at night).
+                          PageDots(
+                            count: _pageCount,
+                            activeIndex: ref.watch(currentPageProvider),
+                            dotColor: pond.isNight
+                                ? pond.firefly.withValues(alpha: 0.85)
+                                : pond.ink,
+                          ),
 
-                      // Log dock.
-                      _LogDock(
-                        apps: layoutAsync.maybeWhen(
-                          data: (l) => l.dock,
-                          orElse: () => const [],
-                        ),
-                        iconShape: settings.iconShape,
-                        pond: pond,
-                        onAppTap: (app) =>
-                            ref.read(homeLayoutProvider.notifier).launch(app),
-                        onDrawerTap: () =>
-                            ref.read(drawerOpenProvider.notifier).open(),
+                          // Log dock.
+                          _LogDock(
+                            apps: layoutAsync.maybeWhen(
+                              data: (l) => l.dock,
+                              orElse: () => const [],
+                            ),
+                            iconShape: settings.iconShape,
+                            pond: pond,
+                            onAppTap: (app) => ref
+                                .read(homeLayoutProvider.notifier)
+                                .launch(app),
+                            onDrawerTap: () =>
+                                ref.read(drawerOpenProvider.notifier).open(),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
-                ),
+
+                  // ---- The mouth showcase drawer (screen 13) ----
+                  if (drawerOpen)
+                    const TickerMode(enabled: true, child: MouthDrawer()),
+
+                  // ---- Long-press menu ----
+                  if (_menu != null)
+                    ContextMenuLayer(
+                      request: _menu!,
+                      onDismissed: () => setState(() => _menu = null),
+                    ),
+                ],
               ),
-
-              // ---- Drawer (screen 4 over the pond) ----
-              if (drawerOpen) const AppDrawer(),
-
-              // ---- Long-press menu ----
-              if (_menu != null)
-                ContextMenuLayer(
-                  request: _menu!,
-                  onDismissed: () => setState(() => _menu = null),
-                ),
-            ],
+            ),
           ),
         ),
       ),
@@ -271,6 +298,7 @@ class _PondRows extends StatelessWidget {
   const _PondRows({
     required this.rows,
     required this.pond,
+    required this.elapsed,
     required this.iconShape,
     required this.onAppTap,
     required this.onAppLongPress,
@@ -278,6 +306,7 @@ class _PondRows extends StatelessWidget {
 
   final List<List<AppEntry>> rows;
   final PondPalette pond;
+  final ValueListenable<Duration> elapsed;
   final IconShape iconShape;
   final void Function(AppEntry) onAppTap;
   final void Function(AppEntry app, Offset anchor) onAppLongPress;
@@ -296,10 +325,12 @@ class _PondRows extends StatelessWidget {
                 for (var c = 0; c < rows[r].length; c++) ...[
                   if (c > 0) const SizedBox(width: 4),
                   rows[r][c].id == 'resident'
-                      ? _ResidentPadCell(pond: pond)
+                      ? _ResidentPadCell(pond: pond, elapsed: elapsed)
                       : _PadCell(
                           app: rows[r][c],
                           pond: pond,
+                          elapsed: elapsed,
+                          phaseIndex: r * 3 + c,
                           iconShape: iconShape,
                           onTap: () => onAppTap(rows[r][c]),
                           onLongPress: (anchor) =>
@@ -315,10 +346,46 @@ class _PondRows extends StatelessWidget {
   }
 }
 
-class _PadCell extends StatelessWidget {
+/// Pad bob — 4.8 s, phase-offset per pad, transform-only.
+class _PadBob extends StatelessWidget {
+  const _PadBob({
+    required this.elapsed,
+    required this.phaseIndex,
+    required this.night,
+    required this.child,
+  });
+
+  final ValueListenable<Duration> elapsed;
+  final int phaseIndex;
+  final bool night;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: elapsed,
+      builder: (context, _) {
+        final t = elapsed.value.inMicroseconds / 1e6;
+        // 4.8 s loop; each pad owns a phase slice of it.
+        final phase =
+            ((t + phaseIndex * 0.8) / ToadMotion.padBob.inMicroseconds / 1e6)
+                .clamp(0, 1);
+        final amp = night ? 2.0 : 3.0;
+        return Transform.translate(
+          offset: Offset(0, -amp * math.sin(phase * 2 * math.pi)),
+          child: child,
+        );
+      },
+    );
+  }
+}
+
+class _PadCell extends ConsumerStatefulWidget {
   const _PadCell({
     required this.app,
     required this.pond,
+    required this.elapsed,
+    required this.phaseIndex,
     required this.iconShape,
     required this.onTap,
     required this.onLongPress,
@@ -326,46 +393,207 @@ class _PadCell extends StatelessWidget {
 
   final AppEntry app;
   final PondPalette pond;
+  final ValueListenable<Duration> elapsed;
+  final int phaseIndex;
   final IconShape iconShape;
   final VoidCallback onTap;
   final void Function(Offset anchor) onLongPress;
 
   @override
+  ConsumerState<_PadCell> createState() => _PadCellState();
+}
+
+class _PadCellState extends ConsumerState<_PadCell>
+    with TickerProviderStateMixin {
+  late final AnimationController _hop;
+
+  @override
+  void initState() {
+    super.initState();
+    // Hop — 320 ms arc, "single sprite translate + squash".
+    _hop = AnimationController(vsync: this, duration: ToadMotion.hop, value: 0);
+  }
+
+  @override
+  void dispose() {
+    _hop.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      onLongPressStart: (details) => onLongPress(details.globalPosition),
+      onTap: widget.onTap,
+      onLongPressStart: (details) {
+        // The hop accompanies the long-press (gesture map, screen 11).
+        _hop.forward(from: 0);
+        widget.onLongPress(details.globalPosition);
+      },
       child: SizedBox(
         width: ToadMetrics.pondCellWidth,
         child: Column(
           children: [
-            SizedBox(
-              width: ToadMetrics.pondPadWidth,
-              height: ToadMetrics.pondPadHeight,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  CustomPaint(
-                    size: const Size(
-                      ToadMetrics.pondPadWidth,
-                      ToadMetrics.pondPadHeight,
+            AnimatedBuilder(
+              animation: Listenable.merge([_hop, widget.elapsed]),
+              builder: (context, child) {
+                final t = _hop.value;
+                final dx = 48 * t;
+                final dy = -math.sin(t * math.pi) * 30;
+                final squash = 1 + 0.06 * math.sin(t * math.pi * 2);
+                return _PadBob(
+                  elapsed: widget.elapsed,
+                  phaseIndex: widget.phaseIndex,
+                  night: widget.pond.isNight,
+                  child: Transform.translate(
+                    offset: Offset(dx, dy),
+                    child: Transform.scale(scale: squash, child: child),
+                  ),
+                );
+              },
+              child: SizedBox(
+                width: ToadMetrics.pondPadWidth,
+                height: ToadMetrics.pondPadHeight,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    CustomPaint(
+                      size: const Size(
+                        ToadMetrics.pondPadWidth,
+                        ToadMetrics.pondPadHeight,
+                      ),
+                      painter: LilyPadPainter(palette: widget.pond),
                     ),
-                    painter: LilyPadPainter(palette: pond),
-                  ),
-                  ToadAppIcon(
-                    app: app,
-                    size: ToadMetrics.pondIconSize,
-                    radius: ToadRadii.pondIconTile,
-                    glyphSize: 21,
-                    shape: iconShape,
-                  ),
-                ],
+                    ToadAppIcon(
+                      app: widget.app,
+                      size: ToadMetrics.pondIconSize,
+                      radius: ToadRadii.pondIconTile,
+                      glyphSize: 21,
+                      shape: widget.iconShape,
+                    ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 3),
             ToadAppLabel(
-              text: app.name,
+              text: widget.app.name,
+              color: widget.pond.appLabel,
+              haloColor: Colors.transparent,
+              fontSize: ToadMetrics.pondAppNameSize,
+              opacity: widget.pond.isNight ? 0.8 : null,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The resident — blinks on the ambient schedule, croaks (900 ms, once)
+/// when tapped, and wakes grumpily before sunrise.
+class _ResidentPadCell extends ConsumerStatefulWidget {
+  const _ResidentPadCell({required this.pond, required this.elapsed});
+
+  final PondPalette pond;
+  final ValueListenable<Duration> elapsed;
+
+  @override
+  ConsumerState<_ResidentPadCell> createState() => _ResidentPadCellState();
+}
+
+class _ResidentPadCellState extends ConsumerState<_ResidentPadCell>
+    with TickerProviderStateMixin {
+  late final AnimationController _croak;
+  bool _awakeOverride = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _croak = AnimationController(
+      vsync: this,
+      duration: ToadMotion.croak, // 900 ms, plays once
+    );
+  }
+
+  @override
+  void dispose() {
+    _croak.dispose();
+    super.dispose();
+  }
+
+  void _pat() {
+    // Night tap: "he blinks awake with a grumpy croak."
+    if (widget.pond.isNight && !_awakeOverride) {
+      setState(() => _awakeOverride = true);
+      Future<void>.delayed(const Duration(seconds: 6), () {
+        if (mounted) setState(() => _awakeOverride = false);
+      });
+    }
+    _croak.forward(from: 0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pond = widget.pond;
+    final asleep = pond.isNight && !_awakeOverride;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: _pat,
+      child: SizedBox(
+        width: ToadMetrics.pondCellWidth,
+        child: Column(
+          children: [
+            AnimatedBuilder(
+              animation: Listenable.merge([widget.elapsed, _croak]),
+              builder: (context, _) {
+                final t = widget.elapsed.value.inMicroseconds / 1e6;
+                // Toad bob — 5.4 s day, slower (7.6 s) asleep.
+                final period = asleep ? 7.6 : 5.4;
+                final phase = (t / period) % 1;
+                final amp = asleep ? 2.0 : 3.0;
+                return _PadBob(
+                  elapsed: widget.elapsed,
+                  phaseIndex: 5,
+                  night: pond.isNight,
+                  child: Transform.translate(
+                    offset: Offset(0, -amp * math.sin(phase * 2 * math.pi)),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        CustomPaint(
+                          size: const Size(
+                            ToadMetrics.toadWidth,
+                            ToadMetrics.toadHeight,
+                          ),
+                          painter: ResidentToadPainter(
+                            palette: pond,
+                            blinking: blinkAt(widget.elapsed.value) && !asleep,
+                            croak: _croak.value,
+                            awake: _awakeOverride,
+                            grumpy: _awakeOverride && pond.isNight,
+                          ),
+                        ),
+                        // Drifting z's while asleep.
+                        if (asleep)
+                          Positioned(
+                            right: -4,
+                            top: -8,
+                            child: _DriftingZs(
+                              elapsed: widget.elapsed,
+                              color: pond.zzz ?? pond.appLabel,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 3),
+            ToadAppLabel(
+              text: asleep ? 'the resident · asleep' : 'the resident',
               color: pond.appLabel,
               haloColor: Colors.transparent,
               fontSize: ToadMetrics.pondAppNameSize,
@@ -378,73 +606,49 @@ class _PadCell extends StatelessWidget {
   }
 }
 
-/// The resident — the toad himself resting on the last pad. Night shows
-/// closed eyes and three drifting z's (drift animation stage 4).
-class _ResidentPadCell extends StatelessWidget {
-  const _ResidentPadCell({required this.pond});
+/// Drifting z's at night — three Caveat z's on staggered 4.5 s loops.
+class _DriftingZs extends StatelessWidget {
+  const _DriftingZs({required this.elapsed, required this.color});
 
-  final PondPalette pond;
+  final ValueListenable<Duration> elapsed;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: ToadMetrics.pondCellWidth,
-      child: Column(
-        children: [
-          SizedBox(
-            width: ToadMetrics.pondPadWidth,
-            height: ToadMetrics.pondPadHeight,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                CustomPaint(
-                  size: const Size(
-                    ToadMetrics.pondPadWidth,
-                    ToadMetrics.pondPadHeight,
-                  ),
-                  painter: LilyPadPainter(palette: pond),
-                ),
-                CustomPaint(
-                  size: const Size(
-                    ToadMetrics.toadWidth,
-                    ToadMetrics.toadHeight,
-                  ),
-                  painter: ResidentToadPainter(palette: pond),
-                ),
-                if (pond.isNight)
-                  Positioned(
-                    right: 0,
-                    top: 0,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _z(15),
-                        const SizedBox(width: 2),
-                        _z(21),
-                        const SizedBox(width: 2),
-                        _z(27),
-                      ],
+    return AnimatedBuilder(
+      animation: elapsed,
+      builder: (context, _) {
+        final t = elapsed.value.inMicroseconds / 1e6;
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (var i = 0; i < 3; i++) ...[
+              if (i > 0) const SizedBox(width: 2),
+              Builder(
+                builder: (context) {
+                  final phase = ((t + i * 1.5) / 4.5) % 1;
+                  final opacity = phase < 0.25
+                      ? phase / 0.25 * 0.85
+                      : 0.85 * (1 - (phase - 0.25) / 0.75);
+                  return Opacity(
+                    opacity: opacity.clamp(0, 1),
+                    child: Transform.translate(
+                      offset: Offset(phase * 14, 4 - phase * 38),
+                      child: Text(
+                        'z',
+                        style: ToadType.caveat(15 + i * 6.0, color: color),
+                      ),
                     ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 3),
-          ToadAppLabel(
-            text: pond.isNight ? 'the resident · asleep' : 'the resident',
-            color: pond.appLabel,
-            haloColor: Colors.transparent,
-            fontSize: ToadMetrics.pondAppNameSize,
-            opacity: pond.isNight ? 0.8 : null,
-          ),
-        ],
-      ),
+                  );
+                },
+              ),
+            ],
+          ],
+        );
+      },
     );
   }
-
-  Widget _z(double size) =>
-      Text('z', style: ToadType.caveat(size, color: pond.zzz ?? pond.appLabel));
 }
 
 class _ClockReflection extends StatelessWidget {

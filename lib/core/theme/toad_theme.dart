@@ -144,6 +144,8 @@ class ToadThemeScope extends ConsumerWidget {
       sunsetMinute: settings.sunsetMinute,
       sunriseHour: settings.sunriseHour,
       sunriseMinute: settings.sunriseMinute,
+      // Calm pond: "night falls instantly" — the loop freezes below.
+      pondCalm: settings.calmPond,
     );
 
     var palette = paletteFor(skin);

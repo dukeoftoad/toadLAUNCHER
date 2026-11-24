@@ -1,6 +1,11 @@
 /// The resident toad — exact geometry from the proposal's SVG
-/// (viewBox 0 0 120 80). Day awake with open eyes; night asleep with
-/// curved-lid strokes. Blink and croak animation hooks arrive in stage 4.
+/// (viewBox 0 0 120 80), plus the stage-4 ambient behaviors:
+///
+///   blink — two-frame eyelid swap, schedule from the ambient clock
+///   croak — throat scale 1→1.9→.75→1.45→1 over 900 ms, once per tap
+///   night — closed lids, slower bob handled widget-side, drifting z's
+///   wake  — tapping the pad before sunrise blinks him awake with a
+///           grumpy croak (flat mouth, eyeballs open)
 library;
 
 import 'package:material_ui/material_ui.dart';
@@ -8,15 +13,44 @@ import 'package:material_ui/material_ui.dart';
 import '../../core/theme/toad_tokens.dart';
 
 class ResidentToadPainter extends CustomPainter {
-  ResidentToadPainter({required this.palette});
+  ResidentToadPainter({
+    required this.palette,
+    this.blinking = false,
+    this.croak = 0,
+    this.awake = false,
+    this.grumpy = false,
+  });
 
   final PondPalette palette;
+
+  /// True during the 180 ms eyelid swap.
+  final bool blinking;
+
+  /// 0..1 progress through the 900 ms croak (0 = idle).
+  final double croak;
+
+  /// Night tap-to-wake override — eyeballs open past sunset.
+  final bool awake;
+
+  /// The grumpy wake-up face: a flat, unimpressed mouth line.
+  final bool grumpy;
+
+  /// Throat scale through the croak keyframes
+  /// (1 → 1.9 @45% → .75 @55% → 1.45 @75% → 1 @100%, 900 ms).
+  static double throatScale(double t) {
+    if (t <= 0 || t >= 1) return 1;
+    if (t < 0.45) return 1 + (1.9 - 1) * (t / 0.45);
+    if (t < 0.55) return 1.9 + (0.75 - 1.9) * ((t - 0.45) / 0.10);
+    if (t < 0.75) return 0.75 + (1.45 - 0.75) * ((t - 0.55) / 0.20);
+    return 1.45 + (1 - 1.45) * ((t - 0.75) / 0.25);
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
     final sx = size.width / 120;
     final sy = size.height / 80;
     final p = palette;
+    final nightAsleep = p.isNight && !awake;
 
     final fill = Paint();
 
@@ -67,8 +101,9 @@ class ResidentToadPainter extends CustomPainter {
     canvas.drawCircle(Offset(37 * sx, 19 * sy), 13 * sx, fill);
     canvas.drawCircle(Offset(83 * sx, 19 * sy), 13 * sx, fill);
 
-    if (p.isNight) {
-      // Asleep: curved closed lids instead of eyeballs.
+    final eyesShut = nightAsleep || blinking;
+    if (eyesShut) {
+      // Closed lids — curved strokes (deeper when grumpy-awake blinks off).
       final lid = Paint()
         ..color = p.toadDetail
         ..strokeWidth = 2.4 * sx
@@ -121,34 +156,91 @@ class ResidentToadPainter extends CustomPainter {
       );
     }
 
-    // Smile: M38 42 Q60 50 82 42.
-    final smile = Paint()
+    // Mouth: the smile, or the grumpy flat line.
+    final mouth = Paint()
       ..color = p.toadDetail
       ..strokeWidth = 2 * sx
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
-    final smilePath = Path()
-      ..moveTo(38 * sx, 42 * sy)
-      ..quadraticBezierTo(60 * sx, 50 * sy, 82 * sx, 42 * sy);
-    canvas.drawPath(smilePath, smile);
+    final mouthPath = grumpy
+        ? (Path()
+            ..moveTo(40 * sx, 45 * sy)
+            ..quadraticBezierTo(60 * sx, 44 * sy, 80 * sx, 45 * sy))
+        : (Path()
+            ..moveTo(38 * sx, 42 * sy)
+            ..quadraticBezierTo(60 * sx, 50 * sy, 82 * sx, 42 * sy));
+    canvas.drawPath(mouthPath, mouth);
 
-    // Throat (day only; croak animation arrives in stage 4).
-    if (!p.isNight) {
+    // Throat — scales through the croak keyframes; day or grumpily awake.
+    final throatVisible = !nightAsleep;
+    if (throatVisible) {
+      final scale = throatScale(croak);
+      canvas.save();
+      canvas.translate(60 * sx, 63 * sy);
+      canvas.scale(1, scale);
       fill
         ..color = p.toadThroat
         ..style = PaintingStyle.fill;
       canvas.drawOval(
-        Rect.fromCenter(
-          center: Offset(60 * sx, 63 * sy),
-          width: 30 * sx,
-          height: 13 * sy,
-        ),
+        Rect.fromCenter(center: Offset.zero, width: 30 * sx, height: 13 * sy),
         fill,
       );
+      canvas.restore();
+
+      // The croak note ♪ — floats up-right during the middle of the croak.
+      if (croak > 0.55 && croak < 1) {
+        final noteT = (croak - 0.55) / 0.45;
+        final opacity = noteT < 0.3 ? noteT / 0.3 : 1 - (noteT - 0.3) / 0.7;
+        _paintNote(
+          canvas,
+          Offset(96 * sx, (46 - 30 * noteT) * sy),
+          22 * sx,
+          const Color(0xFFFFF3C4).withValues(alpha: opacity.clamp(0, 1)),
+          sx,
+          sy,
+        );
+      }
     }
+  }
+
+  /// Caveat-styled croak note — drawn as paths so it lives inside the
+  /// painter (the widget layer adds an accessibility label instead).
+  void _paintNote(
+    Canvas canvas,
+    Offset center,
+    double size,
+    Color color,
+    double sx,
+    double sy,
+  ) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 2 * sx
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+    // Stem + note head.
+    canvas.drawLine(
+      Offset(center.dx, center.dy + 8 * sy),
+      Offset(center.dx, center.dy - 8 * sy),
+      paint,
+    );
+    canvas.drawLine(
+      Offset(center.dx, center.dy - 8 * sy),
+      Offset(center.dx + 8 * sx, center.dy - 5 * sy),
+      paint,
+    );
+    canvas.drawCircle(
+      Offset(center.dx - 2.4 * sx, center.dy + 7.4 * sy),
+      3.4 * sx,
+      Paint()..color = color,
+    );
   }
 
   @override
   bool shouldRepaint(ResidentToadPainter oldDelegate) =>
-      oldDelegate.palette.isNight != palette.isNight;
+      oldDelegate.palette.isNight != palette.isNight ||
+      oldDelegate.blinking != blinking ||
+      oldDelegate.croak != croak ||
+      oldDelegate.awake != awake ||
+      oldDelegate.grumpy != grumpy;
 }

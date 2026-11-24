@@ -116,6 +116,7 @@ class WallpaperStyleScreen extends ConsumerWidget {
                     palette: palette,
                     children: [
                       _SwitchRow(
+                        key: const ValueKey('switch-pond'),
                         title: 'Pond Pro scene',
                         subtitle:
                             'Replaces papers with the living pond — day & night '
@@ -124,6 +125,39 @@ class WallpaperStyleScreen extends ConsumerWidget {
                         accent: palette.accent,
                         ink: ink,
                         onChanged: notifier.setPondPro,
+                      ),
+                      _SwitchRow(
+                        key: const ValueKey('switch-rain'),
+                        title: 'Rain shower',
+                        subtitle:
+                            'Manual weather toggle — ripple density ×3 and the '
+                            'sky dims; never a weather feed',
+                        value: settings.pondRain,
+                        accent: palette.accent,
+                        ink: ink,
+                        onChanged: notifier.setPondRain,
+                      ),
+                      _SwitchRow(
+                        key: const ValueKey('switch-calm'),
+                        title: 'Calm pond',
+                        subtitle:
+                            'Night falls instantly and the whole loop freezes '
+                            'into a still painting — zero animation cost',
+                        value: settings.calmPond,
+                        accent: palette.accent,
+                        ink: ink,
+                        onChanged: notifier.setCalmPond,
+                      ),
+                      _SwitchRow(
+                        key: const ValueKey('switch-battery'),
+                        title: 'Battery guard',
+                        subtitle:
+                            'When battery saver is active, the pond freezes the '
+                            'same way — read on device, never faked in demo',
+                        value: settings.batteryGuard,
+                        accent: palette.accent,
+                        ink: ink,
+                        onChanged: notifier.setBatteryGuard,
                       ),
                     ],
                   ),
@@ -427,6 +461,7 @@ class _GroupCard extends StatelessWidget {
 
 class _SwitchRow extends StatelessWidget {
   const _SwitchRow({
+    super.key,
     required this.title,
     required this.subtitle,
     required this.value,
