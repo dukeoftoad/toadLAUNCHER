@@ -19,25 +19,39 @@ double clockScale(int w, int h) => (w / 4 * h).clamp(0.55, 1.7);
 double widgetZoneHeight(int h) => 64.0 + h * 48;
 
 class PlacedWidgetView extends ConsumerWidget {
-  const PlacedWidgetView({super.key, required this.widget, this.memory});
+  const PlacedWidgetView({
+    super.key,
+    required this.widget,
+    this.memory,
+    this.height,
+  });
 
   final PlacedWidget widget;
   final MemoryCardData? memory;
+
+  /// Explicit pixel height (FEAT-01 canvas). Null falls back to the
+  /// legacy zone height so picker previews keep their sizing.
+  final double? height;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final now = ref.watch(clockProvider).value ?? DateTime.now();
     switch (widget.kind) {
       case WidgetKind.clock:
-        return ClockWidgetView(now: now, w: widget.w, h: widget.h);
+        return ClockWidgetView(
+          now: now,
+          w: widget.w,
+          h: widget.h,
+          height: height,
+        );
       case WidgetKind.memories:
-        return MemoriesWidgetView(memory: memory, h: widget.h);
+        return MemoriesWidgetView(memory: memory, h: widget.h, height: height);
       case WidgetKind.calendar:
-        return CalendarWidgetView(now: now, h: widget.h);
+        return CalendarWidgetView(now: now, h: widget.h, height: height);
       case WidgetKind.sticky:
-        return StickyWidgetView(h: widget.h);
+        return StickyWidgetView(h: widget.h, height: height);
       case WidgetKind.androidHosted:
-        return AndroidHostedWidgetView(widget: widget);
+        return AndroidHostedWidgetView(widget: widget, height: height);
     }
   }
 }
@@ -48,11 +62,13 @@ class ClockWidgetView extends ConsumerWidget {
     required this.now,
     required this.w,
     required this.h,
+    this.height,
   });
 
   final DateTime now;
   final int w;
   final int h;
+  final double? height;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -63,7 +79,7 @@ class ClockWidgetView extends ConsumerWidget {
     final battery = ref.watch(batteryMonitorProvider);
 
     return SizedBox(
-      height: widgetZoneHeight(h),
+      height: height ?? widgetZoneHeight(h),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(18, 12, 18, 4),
         child: Row(
@@ -176,10 +192,16 @@ class ClockWidgetView extends ConsumerWidget {
 }
 
 class MemoriesWidgetView extends StatelessWidget {
-  const MemoriesWidgetView({super.key, required this.memory, required this.h});
+  const MemoriesWidgetView({
+    super.key,
+    required this.memory,
+    required this.h,
+    this.height,
+  });
 
   final MemoryCardData? memory;
   final int h;
+  final double? height;
 
   @override
   Widget build(BuildContext context) {
@@ -187,7 +209,7 @@ class MemoriesWidgetView extends StatelessWidget {
     final data = memory;
 
     return SizedBox(
-      height: widgetZoneHeight(h),
+      height: height ?? widgetZoneHeight(h),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         child: Container(
@@ -267,10 +289,16 @@ class MemoriesWidgetView extends StatelessWidget {
 }
 
 class CalendarWidgetView extends StatelessWidget {
-  const CalendarWidgetView({super.key, required this.now, required this.h});
+  const CalendarWidgetView({
+    super.key,
+    required this.now,
+    required this.h,
+    this.height,
+  });
 
   final DateTime now;
   final int h;
+  final double? height;
 
   static const _weekdays = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
   static const _months = [
@@ -297,7 +325,7 @@ class CalendarWidgetView extends StatelessWidget {
     final leadingBlanks = first.weekday - 1;
 
     return SizedBox(
-      height: widgetZoneHeight(h),
+      height: height ?? widgetZoneHeight(h),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         child: Container(
@@ -375,9 +403,10 @@ class CalendarWidgetView extends StatelessWidget {
 }
 
 class StickyWidgetView extends ConsumerWidget {
-  const StickyWidgetView({super.key, required this.h});
+  const StickyWidgetView({super.key, required this.h, this.height});
 
   final int h;
+  final double? height;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -401,7 +430,7 @@ class StickyWidgetView extends ConsumerWidget {
     }
 
     return SizedBox(
-      height: widgetZoneHeight(h),
+      height: height ?? widgetZoneHeight(h),
       width: double.infinity,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),

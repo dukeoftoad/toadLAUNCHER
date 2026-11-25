@@ -68,27 +68,35 @@ class DockBar extends StatelessWidget {
                 for (var i = 0; i < apps.take(4).length; i++)
                   Expanded(
                     child: Center(
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () => onAppTap(apps[i]),
-                        onLongPress: onAppLongPress == null
-                            ? null
-                            : () => onAppLongPress!(apps[i]),
-                        child: ToadAppIcon(
-                          app: apps[i],
-                          size: ToadMetrics.dockIconSize,
-                          shape: iconShape,
-                          glyphSize: 21,
+                      child: Semantics(
+                        button: true,
+                        label: apps[i].name,
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => onAppTap(apps[i]),
+                          onLongPress: onAppLongPress == null
+                              ? null
+                              : () => onAppLongPress!(apps[i]),
+                          child: ToadAppIcon(
+                            app: apps[i],
+                            size: ToadMetrics.dockIconSize,
+                            shape: iconShape,
+                            glyphSize: 21,
+                          ),
                         ),
                       ),
                     ),
                   ),
                 Expanded(
                   child: Center(
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: onDrawerTap,
-                      child: _DrawerArrow(color: arrowColor ?? palette.ink),
+                    child: Semantics(
+                      button: true,
+                      label: 'Open the app drawer',
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: onDrawerTap,
+                        child: _DrawerArrow(color: arrowColor ?? palette.ink),
+                      ),
                     ),
                   ),
                 ),

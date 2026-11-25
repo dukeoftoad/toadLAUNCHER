@@ -1,12 +1,9 @@
 library;
 
-import 'dart:async';
-import 'dart:convert';
-
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
+import '../reliability/safe_store.dart';
 import '../theme/skins.dart';
 import '../theme/toad_tokens.dart';
 
@@ -114,6 +111,8 @@ class LauncherSettings {
     this.lowBatteryCalm = true,
     this.clockStyle = HeroClockStyle.hand,
     this.clockHourFormat = ClockHourFormat.system,
+    this.themedIcons = false,
+    this.focusMinutes = 25,
   });
 
   final SkinMode skinMode;
@@ -164,6 +163,10 @@ class LauncherSettings {
 
   final ClockHourFormat clockHourFormat;
 
+  final bool themedIcons;
+
+  final int focusMinutes;
+
   final bool usageRecentsOptIn;
 
   final bool introSeen;
@@ -206,6 +209,8 @@ class LauncherSettings {
     bool? lowBatteryCalm,
     HeroClockStyle? clockStyle,
     ClockHourFormat? clockHourFormat,
+    bool? themedIcons,
+    int? focusMinutes,
   }) {
     return LauncherSettings(
       skinMode: skinMode ?? this.skinMode,
@@ -244,6 +249,8 @@ class LauncherSettings {
       lowBatteryCalm: lowBatteryCalm ?? this.lowBatteryCalm,
       clockStyle: clockStyle ?? this.clockStyle,
       clockHourFormat: clockHourFormat ?? this.clockHourFormat,
+      themedIcons: themedIcons ?? this.themedIcons,
+      focusMinutes: focusMinutes ?? this.focusMinutes,
     );
   }
 
@@ -283,6 +290,8 @@ class LauncherSettings {
     'lowBatteryCalm': lowBatteryCalm,
     'clockStyle': clockStyle.index,
     'clockHourFormat': clockHourFormat.index,
+    'themedIcons': themedIcons,
+    'focusMinutes': focusMinutes,
   };
 
   factory LauncherSettings.fromJson(Map<String, Object?> json) {
@@ -322,11 +331,14 @@ class LauncherSettings {
       lowBatteryCalm: (json['lowBatteryCalm'] as bool?) ?? true,
       clockStyle: HeroClockStyle.values[(json['clockStyle'] as int?) ?? 0],
       clockHourFormat: ClockHourFormat.values[(json['clockHourFormat'] as int?) ?? 0],
+      themedIcons: (json['themedIcons'] as bool?) ?? false,
+      focusMinutes: ((json['focusMinutes'] as num?)?.toInt() ?? 25).clamp(5, 120),
     );
   }
 }
 
 const String _kPrefsKey = 'toadlauncher.settings.v1';
+final SafeStore _kSettingsStore = SafeStore(_kPrefsKey, schemaVersion: 2);
 
 class LauncherSettingsController extends Notifier<LauncherSettings> {
   @override
@@ -337,13 +349,21 @@ class LauncherSettingsController extends Notifier<LauncherSettings> {
 
   Future<void> _restore() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString(_kPrefsKey);
-      if (raw == null || raw.isEmpty) return;
-      if (state != const LauncherSettings()) return;
-      state = LauncherSettings.fromJson(
-        (jsonDecode(raw) as Map<dynamic, dynamic>).cast<String, Object?>(),
+      final restored = await _kSettingsStore.read<LauncherSettings>(
+        (json) {
+          if (json is! Map) return null;
+          try {
+            return LauncherSettings.fromJson(
+              json.cast<String, Object?>(),
+            );
+          } catch (_) {
+            return null;
+          }
+        },
       );
+      if (restored == null) return;
+      if (state != const LauncherSettings()) return;
+      state = restored;
     } catch (_) {
     }
   }
@@ -351,8 +371,7 @@ class LauncherSettingsController extends Notifier<LauncherSettings> {
   Future<void> patch(LauncherSettings next) async {
     state = next;
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_kPrefsKey, jsonEncode(next.toJson()));
+      await _kSettingsStore.write(next.toJson());
     } catch (_) {
     }
   }
@@ -403,6 +422,11 @@ class LauncherSettingsController extends Notifier<LauncherSettings> {
   void setClockStyle(HeroClockStyle s) => patch(state.copyWith(clockStyle: s));
   void setClockHourFormat(ClockHourFormat f) =>
       patch(state.copyWith(clockHourFormat: f));
+
+  void setThemedIcons(bool v) => patch(state.copyWith(themedIcons: v));
+
+  void setFocusMinutes(int m) =>
+      patch(state.copyWith(focusMinutes: m.clamp(5, 120)));
 
   void setIntroSeen() => patch(state.copyWith(introSeen: true));
 

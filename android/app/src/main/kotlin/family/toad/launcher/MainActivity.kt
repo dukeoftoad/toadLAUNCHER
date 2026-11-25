@@ -8,6 +8,7 @@ import android.app.usage.UsageStatsManager
 import android.appwidget.AppWidgetHost
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProviderInfo
+import android.content.ActivityNotFoundException
 import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
@@ -18,6 +19,10 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffXfermode
 import android.graphics.drawable.AdaptiveIconDrawable
 import android.net.Uri
 import android.os.BatteryManager
@@ -53,6 +58,7 @@ class MainActivity : FlutterActivity() {
     private val updateExecutor = Executors.newSingleThreadExecutor()
     private var channel: MethodChannel? = null
     private var pendingWallpaperResult: MethodChannel.Result? = null
+    private var pendingConfigureResult: MethodChannel.Result? = null
     private var widgetHost: AppWidgetHost? = null
 
     private val hostedViews = HashMap<Int, android.widget.FrameLayout>()
@@ -127,6 +133,25 @@ class MainActivity : FlutterActivity() {
                 "hostWidget" -> onMain(result) {
                     hostWidget(call.argument<String>("providerId") ?: "")
                 }
+                "launchWidgetConfigure" -> {
+                    val previous = pendingConfigureResult
+                    pendingConfigureResult = null
+                    previous?.success(false)
+                    pendingConfigureResult = result
+                    val started = try {
+                        launchWidgetConfigure(
+                            (call.arguments as Map<*, *>)["appWidgetId"] as Number,
+                        )
+                    } catch (e: Exception) {
+                        Log.w(TAG, "widget configure launch failed", e)
+                        false
+                    }
+                    if (!started) {
+                        pendingConfigureResult = null
+                        result.success(false)
+                    }
+                }
+                "hostedAppWidgetIds" -> onMain(result) { hostedAppWidgetIds() }
                 "deleteHostedWidget" -> onMain(result) {
                     deleteHostedWidget(
                         (call.arguments as Map<*, *>)["appWidgetId"] as Number,
@@ -231,6 +256,15 @@ class MainActivity : FlutterActivity() {
         } else {
             @Suppress("UnspecifiedRegisterReceiverOption")
             registerReceiver(batteryEvents, batteryFilter)
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        if (intent.action == Intent.ACTION_MAIN &&
+            intent.hasCategory(Intent.CATEGORY_HOME)
+        ) {
+            channel?.invokeMethod("homePressed", null)
         }
     }
 
@@ -342,20 +376,90 @@ class MainActivity : FlutterActivity() {
         for (info in resolves) {
             val pkg = info.activityInfo.packageName
             if (pkg == packageName) continue
+            val stamp = try {
+                packageManager.getPackageInfo(pkg, 0).lastUpdateTime
+            } catch (e: Exception) {
+                0L
+            }
+            val drawable = info.loadIcon(packageManager)
             out.add(
                 mapOf(
                     "packageId" to pkg,
                     "label" to (info.loadLabel(packageManager)?.toString() ?: pkg),
-                    "iconPng" to iconPng(info.loadIcon(packageManager)),
+                    "iconPng" to cachedIconPng(pkg, stamp) { iconPng(drawable) },
+                    "iconMonoPng" to cachedIconPng("$pkg.mono", stamp) {
+                        iconMonoPng(drawable)
+                    },
                 ),
             )
         }
         return out
     }
 
+    private fun iconsDir(): File {
+        val dir = File(filesDir, "icon-cache")
+        if (!dir.exists()) dir.mkdirs()
+        return dir
+    }
+
+    private fun cachedIconPng(
+        key: String,
+        stamp: Long,
+        produce: () -> ByteArray?,
+    ): ByteArray? {
+        val safeKey = key.replace(Regex("[^A-Za-z0-9._]"), "_")
+        val file = File(iconsDir(), "$safeKey-$stamp.png")
+        if (file.exists()) {
+            val cached = try {
+                file.readBytes()
+            } catch (e: Exception) {
+                null
+            }
+            if (cached != null) return cached
+        }
+        val fresh = produce() ?: return null
+        try {
+            iconsDir().listFiles()?.forEach {
+                if (it.name.startsWith("$safeKey-")) it.delete()
+            }
+            file.writeBytes(fresh)
+        } catch (e: Exception) {
+            Log.w(TAG, "icon cache write failed for $safeKey", e)
+        }
+        return fresh
+    }
+
+    private fun iconMonoPng(
+        drawable: android.graphics.drawable.Drawable,
+        size: Int = 72,
+    ): ByteArray? {
+        if (Build.VERSION.SDK_INT < 33) return null
+        val mono = (drawable as? AdaptiveIconDrawable)?.monochrome ?: return null
+        return try {
+            val layer = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+            val layerCanvas = Canvas(layer)
+            val scaled = mono.mutate()
+            scaled.setBounds(0, 0, size, size)
+            scaled.draw(layerCanvas)
+            val mask = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+            val maskCanvas = Canvas(mask)
+            maskCanvas.drawColor(Color.WHITE)
+            val paint = Paint()
+            paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
+            maskCanvas.drawBitmap(layer, 0f, 0f, paint)
+            val out = java.io.ByteArrayOutputStream()
+            mask.compress(Bitmap.CompressFormat.PNG, 100, out)
+            mask.recycle()
+            layer.recycle()
+            out.toByteArray()
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     private fun iconPng(
         drawable: android.graphics.drawable.Drawable,
-        size: Int = 96,
+        size: Int = 72,
     ): ByteArray? {
         return try {
             val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
@@ -369,7 +473,7 @@ class MainActivity : FlutterActivity() {
                 drawable.draw(canvas)
             }
             val out = java.io.ByteArrayOutputStream()
-            bitmap.compress(Bitmap.CompressFormat.PNG, 90, out)
+            bitmap.compress(Bitmap.CompressFormat.PNG, 85, out)
             bitmap.recycle()
             out.toByteArray()
         } catch (e: Exception) {
@@ -464,6 +568,12 @@ class MainActivity : FlutterActivity() {
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_CONFIGURE) {
+            val result = pendingConfigureResult
+            pendingConfigureResult = null
+            result?.success(resultCode == android.app.Activity.RESULT_OK)
+            return
+        }
         if (requestCode != PICK_WALLPAPER) return
         val result = pendingWallpaperResult
         pendingWallpaperResult = null
@@ -985,19 +1095,79 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun hostWidget(providerId: String): Int? {
+    private fun hostWidget(providerId: String): Map<String, Any?> {
+        val fail = mapOf<String, Any?>("appWidgetId" to null, "configure" to null)
         return try {
-            val cn = ComponentName.unflattenFromString(providerId) ?: return null
+            val cn = ComponentName.unflattenFromString(providerId) ?: return fail
             val awm = AppWidgetManager.getInstance(this)
             val host = ensureWidgetHost()
             val id = host.allocateAppWidgetId()
-            if (awm.bindAppWidgetIdIfAllowed(id, cn)) id else {
+            val info = awm.installedProviders.firstOrNull { it.provider == cn }
+            if (info == null) {
                 host.deleteAppWidgetId(id)
-                null
+                return fail
             }
+            val density = resources.displayMetrics.density
+            val options = Bundle().apply {
+                putInt(
+                    AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH,
+                    (info.minWidth / density).toInt().coerceAtLeast(1),
+                )
+                putInt(
+                    AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH,
+                    (info.minWidth / density).toInt().coerceAtLeast(1),
+                )
+                putInt(
+                    AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT,
+                    (info.minHeight / density).toInt().coerceAtLeast(1),
+                )
+                putInt(
+                    AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT,
+                    (info.minHeight / density).toInt().coerceAtLeast(1),
+                )
+            }
+            if (!awm.bindAppWidgetIdIfAllowed(id, cn, options)) {
+                host.deleteAppWidgetId(id)
+                return fail
+            }
+            mapOf(
+                "appWidgetId" to id,
+                "configure" to awm.getAppWidgetInfo(id)?.configure?.flattenToString(),
+            )
         } catch (e: Exception) {
             Log.w(TAG, "hostWidget failed", e)
+            fail
+        }
+    }
+
+    private fun launchWidgetConfigure(appWidgetId: Number): Boolean {
+        val info = try {
+            AppWidgetManager.getInstance(this).getAppWidgetInfo(appWidgetId.toInt())
+        } catch (e: Exception) {
             null
+        }
+        val configure = info?.configure ?: return false
+        val intent = Intent(AppWidgetManager.ACTION_APPWIDGET_CONFIGURE).apply {
+            component = configure
+            putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId.toInt())
+        }
+        return try {
+            startActivityForResult(intent, REQUEST_CONFIGURE)
+            true
+        } catch (e: ActivityNotFoundException) {
+            Log.w(TAG, "widget configure activity missing", e)
+            false
+        } catch (e: Exception) {
+            Log.w(TAG, "widget configure launch failed", e)
+            false
+        }
+    }
+
+    private fun hostedAppWidgetIds(): List<Int> {
+        return try {
+            ensureWidgetHost().appWidgetIds?.toList() ?: emptyList()
+        } catch (e: Exception) {
+            emptyList()
         }
     }
 
@@ -1224,6 +1394,7 @@ class MainActivity : FlutterActivity() {
         private const val TAG = "toadLAUNCHER"
         private const val CHANNEL = "family.toad.launcher/device"
         private const val PICK_WALLPAPER = 7001
+        private const val REQUEST_CONFIGURE = 7002
         private const val WIDGET_HOST_ID = 0x70AD
         const val VIEW_TYPE = "toad-widget-host"
     }

@@ -11,7 +11,6 @@ import '../../core/repositories/device_app_repository.dart';
 import '../../core/settings/launcher_settings.dart';
 import '../../core/theme/toad_theme.dart';
 import '../../core/theme/toad_tokens.dart';
-import '../../shared/widgets/placed_widgets.dart' show widgetZoneHeight;
 import '../../shared/widgets/sketchbook_wallpaper.dart';
 import '../../shared/widgets/toad_ask.dart';
 import '../../shared/widgets/toad_toast.dart';
@@ -19,7 +18,8 @@ import '../../shared/widgets/wallpaper_glow.dart';
 import '../context_menu/app_context_menu.dart';
 import '../drawer/app_drawer.dart' show AppDrawer, drawerMenuBridgeProvider;
 import '../edit/edit_mode.dart'
-    show EditBottomStrip, EditHintBubble, GridSkeletonPainter, WidgetZone;
+    show EditBottomStrip, EditHintBubble, GridSkeletonPainter;
+import '../focus/focus_controller.dart';
 import '../folder/folder_overlay.dart'
     show
         FolderOverlay,
@@ -31,6 +31,7 @@ import '../wallpaper_style/wallpaper_style_screen.dart'
     show WallpaperStyleScreen;
 import '../widget_picker/widget_picker_sheet.dart'
     show PlacementGhost, showWidgetPicker;
+import 'grid_flow.dart' show canvasGutter, canvasRowPitch, resolveDropAnchor;
 import 'home_controller.dart';
 import 'widgets/app_grid.dart';
 import 'widgets/dock_bar.dart';
@@ -59,6 +60,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   final GlobalKey _pageAreaKey = GlobalKey();
 
+  DeviceBridge? _homeBridge;
+  late final void Function() _homePressedHandler;
+
   @override
   void initState() {
     super.initState();
@@ -69,12 +73,39 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ref.read(currentPageProvider.notifier).set(page);
       }
     });
+    _homePressedHandler = _handleHomePressed;
+    _homeBridge = ref.read(deviceBridgeProvider);
+    _homeBridge!.addHomePressedListener(_homePressedHandler);
   }
 
   @override
   void dispose() {
+    _homeBridge?.removeHomePressedListener(_homePressedHandler);
     _pageController.dispose();
     super.dispose();
+  }
+
+  /// PLT-08: Home pressed while already Home. Peel one overlay per press;
+  /// when the desk is clear, walk back to page 1.
+  void _handleHomePressed() {
+    if (!mounted) return;
+    if (ref.read(placementProvider) != null) {
+      ref.read(placementProvider.notifier).cancel();
+    } else if (_menu != null) {
+      _dismissMenu();
+    } else if (ref.read(openFolderProvider) != null) {
+      ref.read(openFolderProvider.notifier).close();
+    } else if (ref.read(drawerOpenProvider)) {
+      ref.read(drawerOpenProvider.notifier).close();
+    } else if (ref.read(editModeProvider)) {
+      ref.read(editModeProvider.notifier).exit();
+    } else if (ref.read(currentPageProvider) != 0) {
+      _pageController.animateToPage(
+        0,
+        duration: const Duration(milliseconds: 240),
+        curve: Curves.easeOutCubic,
+      );
+    }
   }
 
   void _launch(AppEntry app) {
@@ -362,6 +393,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           : null,
       onWallpaper: _openWallpaperStyle,
       onHomeSettings: _openSettings,
+      onFocus: variant == MenuContext.emptySpace
+          ? () {
+              _dismissMenu();
+              ref
+                  .read(focusSessionProvider.notifier)
+                  .start(
+                    ref.read(launcherSettingsProvider).focusMinutes,
+                  );
+            }
+          : null,
     );
   }
 
@@ -477,35 +518,63 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     final page = ref.read(currentPageProvider);
     final layout = ref.read(homeLayoutProvider).valueOrNull;
+    final settings = ref.read(launcherSettingsProvider);
+    final columns = settings.gridColumns;
+    final width = box.size.width;
+    final cellW = (width - canvasGutter * 2) / columns;
+    final w = _defaultSpanW(kind, settings);
+    final h = _defaultSpanH(kind, settings);
 
-    var index = 0;
-    var acc = 0.0;
-    for (final w in layout?.widgetsOnPage(page) ?? const <PlacedWidget>[]) {
-      final h = widgetZoneHeight(w.h);
-      if (local.dy > acc + h / 2) {
-        index++;
-        acc += h + 8;
-      } else {
-        break;
-      }
-    }
+    final col = ((local.dx - canvasGutter) / cellW).floor().clamp(
+      0,
+      columns - w,
+    );
+    final row = (local.dy / canvasRowPitch).floor();
+    final anchor = resolveDropAnchor(
+      existing: layout?.widgetsOnPage(page) ?? const <PlacedWidget>[],
+      row: row,
+      col: col,
+      w: w,
+      h: h,
+      columns: columns,
+    );
 
     final placed = ref
         .read(homeLayoutProvider.notifier)
-        .placeWidget(kind, page: page, index: index);
+        .placeWidget(kind, page: page, row: anchor.row, col: anchor.col);
     ref.read(placementProvider.notifier).cancel();
     if (placed) {
       ref
           .read(toastProvider.notifier)
-          .showUndoable('Placed on page ${page + 1} — drag its body to move');
+          .showUndoable(
+            'Placed on page ${page + 1} — drag it anywhere in edit mode',
+          );
     }
   }
+
+  int _defaultSpanW(WidgetKind kind, LauncherSettings settings) =>
+      switch (kind) {
+        WidgetKind.clock => settings.clockSpanW,
+        WidgetKind.memories => 4,
+        WidgetKind.calendar => 4,
+        WidgetKind.sticky => 2,
+        WidgetKind.androidHosted => 4,
+      };
+
+  int _defaultSpanH(WidgetKind kind, LauncherSettings settings) =>
+      switch (kind) {
+        WidgetKind.clock => settings.clockSpanH,
+        WidgetKind.memories => 2,
+        WidgetKind.calendar => 4,
+        WidgetKind.sticky => 2,
+        WidgetKind.androidHosted => 2,
+      };
 
   @override
   Widget build(BuildContext context) {
     final skin = ToadTheme.of(context);
     final palette = skin.palette;
-    final settings = ref.watch(launcherSettingsProvider);
+    final settings = ref.watch(focusAwareSettingsProvider);
     final layoutAsync = ref.watch(homeLayoutProvider);
 
     final drawerOpen = ref.watch(drawerOpenProvider);
@@ -611,6 +680,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                       foregroundPainter: editMode
                                           ? GridSkeletonPainter(
                                               color: palette.ink,
+                                              columns: settings.gridColumns,
                                             )
                                           : null,
                                       child: DragTarget<WidgetKind>(
@@ -624,6 +694,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                               controller: _pageController,
                                               columns: settings.gridColumns,
                                               iconShape: settings.iconShape,
+                                              memory: settings.showMemoriesCard
+                                                  ? layout.memory
+                                                  : null,
+                                              widgets: [
+                                                for (final w
+                                                    in layout.widgets)
+                                                  if (w.kind != WidgetKind
+                                                      .memories ||
+                                                      settings
+                                                          .showMemoriesCard)
+                                                    w,
+                                              ],
                                               onAppTap: _launch,
                                               onAppLongPress: (app, anchor) =>
                                                   _showAppMenu(
@@ -638,12 +720,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                                     anchor: anchor,
                                                     folder: folder,
                                                   ),
-                                              buildPageHeader: (pageIndex) =>
-                                                  WidgetZone(
-                                                    pageIndex: pageIndex,
-                                                    memory: layout.memory,
-                                                    onClockTap: _openClockApp,
-                                                  ),
+                                              onClockTap: _openClockApp,
                                             ),
                                       ),
                                     );
@@ -717,6 +794,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
 
               if (drawerOpen) AppDrawer(startWithSearch: _drawerWithSearch),
+
+              Positioned(
+                top: 12,
+                right: 14,
+                child: SafeArea(child: FocusChip()),
+              ),
 
               const DeviceStatusBanner(),
 

@@ -14,6 +14,7 @@ import '../../core/device/battery_monitor.dart'
 import '../../core/repositories/app_repository.dart';
 import '../../core/repositories/device_app_repository.dart';
 import '../../core/settings/launcher_settings.dart';
+import '../focus/focus_controller.dart' show focusAwareSettingsProvider;
 import '../../core/theme/toad_theme.dart';
 import '../../core/theme/toad_tokens.dart';
 import '../../shared/widgets/toad_app_icon.dart';
@@ -115,7 +116,7 @@ class _PondHomeState extends ConsumerState<PondHome> {
   Widget build(BuildContext context) {
     final skin = ToadTheme.of(context);
     final pond = skin.pond;
-    final settings = ref.watch(launcherSettingsProvider);
+    final settings = ref.watch(focusAwareSettingsProvider);
     final now = ref.watch(clockProvider).value ?? DateTime.now();
     final layoutAsync = ref.watch(homeLayoutProvider);
     final repo = ref.watch(appRepositoryProvider);

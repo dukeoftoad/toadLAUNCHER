@@ -293,6 +293,35 @@ class HomeScreenSettingsPage extends ConsumerWidget {
               ink: ink,
               onChanged: notifier.setShowMemoriesCard,
             ),
+            _SwitchRow(
+              title: 'Themed icons',
+              subtitle:
+                  'Apps that ship a monochrome layer render in the ink and '
+                  'paper palette instead of full color',
+              value: settings.themedIcons,
+              accent: palette.accent,
+              ink: ink,
+              onChanged: notifier.setThemedIcons,
+            ),
+            _ChoiceRow(
+              title: 'Focus session length',
+              subtitle:
+                  'Long-press empty space → Focus — the pond calms and '
+                  'dots hide until the timer ends',
+              options: const ['15 min', '25 min', '45 min', '60 min'],
+              selectedIndex: switch (settings.focusMinutes) {
+                15 => 0,
+                25 => 1,
+                45 => 2,
+                _ => 3,
+              },
+              accent: palette.accent,
+              accentWash: palette.accentWash,
+              ink: ink,
+              hairline: palette.hairline,
+              onSelect: (i) =>
+                  notifier.setFocusMinutes(const [15, 25, 45, 60][i]),
+            ),
           ],
         ),
         _GroupCard(

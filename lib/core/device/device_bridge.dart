@@ -12,6 +12,7 @@ class DeviceApp {
     required this.packageId,
     required this.label,
     this.iconPng,
+    this.iconMonoPng,
     this.isFamily = false,
   });
 
@@ -20,10 +21,32 @@ class DeviceApp {
 
   final Uint8List? iconPng;
 
+  final Uint8List? iconMonoPng;
+
   final bool isFamily;
 
-  DeviceApp withFamily(bool family) =>
-      DeviceApp(packageId: packageId, label: label, iconPng: iconPng, isFamily: family);
+  DeviceApp withFamily(bool family) => DeviceApp(
+    packageId: packageId,
+    label: label,
+    iconPng: iconPng,
+    iconMonoPng: iconMonoPng,
+    isFamily: family,
+  );
+}
+
+@immutable
+class WidgetBindResult {
+  const WidgetBindResult({this.appWidgetId, this.configure});
+
+  final int? appWidgetId;
+
+  /// Flattened ComponentName of the provider's configure activity, when the
+  /// bound widget declares one (PLT-07). Empty string means none.
+  final String? configure;
+
+  bool get bound => appWidgetId != null;
+
+  bool get needsConfigure => bound && (configure ?? '').isNotEmpty;
 }
 
 @immutable
@@ -235,6 +258,7 @@ class DeviceBridge {
             packageId: item['packageId'] as String? ?? '',
             label: item['label'] as String? ?? '',
             iconPng: item['iconPng'] as Uint8List?,
+            iconMonoPng: item['iconMonoPng'] as Uint8List?,
           ),
     ];
   }
@@ -397,13 +421,47 @@ class DeviceBridge {
     }
   }
 
-  Future<int?> hostWidget(String providerId) async {
+  Future<WidgetBindResult> hostWidget(String providerId) async {
     try {
-      return (await _invoke('hostWidget', {
+      final raw = await _invoke('hostWidget', {
         'providerId': providerId,
-      })) as int?;
+      });
+      if (raw is Map) {
+        return WidgetBindResult(
+          appWidgetId: (raw['appWidgetId'] as num?)?.toInt(),
+          configure: raw['configure'] as String?,
+        );
+      }
+      return const WidgetBindResult();
     } catch (_) {
-      return null;
+      return const WidgetBindResult();
+    }
+  }
+
+  /// Opens the bound widget's configure activity. Resolves true only when
+  /// the activity finished with RESULT_OK; false on cancel, on launch
+  /// failure, or when the widget has no configure activity.
+  Future<bool> launchWidgetConfigure(int appWidgetId) async {
+    try {
+      return await _invoke('launchWidgetConfigure', {
+        'appWidgetId': appWidgetId,
+      }) == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// All app widget ids the host currently holds — the source of truth for
+  /// orphan cleanup at startup (PLT-07).
+  Future<List<int>> hostedAppWidgetIds() async {
+    try {
+      final raw = await _invoke('hostedAppWidgetIds') as List<Object?>?;
+      if (raw == null) return const [];
+      return [
+        for (final item in raw) (item as num).toInt(),
+      ];
+    } catch (_) {
+      return const [];
     }
   }
 
@@ -424,6 +482,8 @@ class DeviceBridge {
   _notificationCountListeners = [];
 
   final List<void Function(BatteryStatus status)> _batteryListeners = [];
+
+  final List<void Function()> _homePressedListeners = [];
 
   bool _eventHandlerInstalled = false;
 
@@ -463,6 +523,10 @@ class DeviceBridge {
               listener(status);
             }
           }
+        case 'homePressed':
+          for (final listener in _homePressedListeners.toList()) {
+            listener();
+          }
       }
       return null;
     });
@@ -501,6 +565,15 @@ class DeviceBridge {
 
   void removeBatteryListener(void Function(BatteryStatus status) listener) {
     _batteryListeners.remove(listener);
+  }
+
+  void addHomePressedListener(void Function() listener) {
+    _installEventHandler();
+    _homePressedListeners.add(listener);
+  }
+
+  void removeHomePressedListener(void Function() listener) {
+    _homePressedListeners.remove(listener);
   }
 
   Future<List<String>?> usageRecents() async {

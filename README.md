@@ -4,7 +4,7 @@ Part of the toad family (with toadGALLERY and toadPLAYER). Hand-made, calm,
 instant — an Android home-screen launcher with no ads, no analytics and **no
 network permission at all**.
 
-**Current release: v1.1.0** (see [CHANGELOG.md](CHANGELOG.md) — `pubspec.yaml`
+**Current release: v1.2.0** (see [CHANGELOG.md](CHANGELOG.md) — `pubspec.yaml`
 is the single source of truth for the version).
 
 - Calm by default: a hand-drawn sketchbook (or a living pond) instead of a
@@ -21,11 +21,11 @@ is the single source of truth for the version).
 
 ## Install
 
-Grab `toadlauncher-v1.1.0-universal-install.apk` from the
+Grab `toadlauncher-v1.2.0-universal-install.apk` from the
 [latest release](https://github.com/dukeoftoad/toadLAUNCHER/releases/latest)
 (universal — every architecture).
 
-1. **Updating from v1.0.0 or older**: installs right over it on
+1. **Updating from v1.1.0 or older**: installs right over it on
    **Android 9+** — the signing key rotated with an APK Signature Scheme v3
    lineage. **Android 8.x** reinstalls once (same app, new key; your layout
    and settings survive via Android's backup or re-setup).
@@ -97,8 +97,8 @@ release — tag a clean tree instead.
 ```bash
 # 1. bump version in pubspec.yaml, update CHANGELOG.md
 git checkout main && git pull
-git add <specific files> && git commit -m "release: v1.1.0"
-git tag v1.1.0
+git add <specific files> && git commit -m "release: v1.2.0"
+git tag v1.2.0
 git push origin main --tags
 ```
 

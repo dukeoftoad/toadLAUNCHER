@@ -666,8 +666,8 @@ class _AndroidWidgetsSectionState extends ConsumerState<_AndroidWidgetsSection> 
       final bridge = ref.read(deviceBridgeProvider);
       final isHome = await bridge.isDefaultHome();
       if (isHome) {
-        final appWidgetId = await bridge.hostWidget(info.providerId);
-        if (appWidgetId == null) {
+        final bind = await bridge.hostWidget(info.providerId);
+        if (!bind.bound) {
           messenger
             ..clearSnackBars()
             ..showSnackBar(SnackBar(content: Text(
@@ -675,6 +675,19 @@ class _AndroidWidgetsSectionState extends ConsumerState<_AndroidWidgetsSection> 
               'and try again',
             )));
           return;
+        }
+        final appWidgetId = bind.appWidgetId!;
+        if (bind.needsConfigure) {
+          final configured = await bridge.launchWidgetConfigure(appWidgetId);
+          if (!configured) {
+            await bridge.deleteHostedWidget(appWidgetId);
+            messenger
+              ..clearSnackBars()
+              ..showSnackBar(SnackBar(content: Text(
+                'Setup was cancelled — the widget was not added',
+              )));
+            return;
+          }
         }
         final page = ref.read(currentPageProvider);
         final placed = ref.read(homeLayoutProvider.notifier).placeHostedWidget(
@@ -684,6 +697,9 @@ class _AndroidWidgetsSectionState extends ConsumerState<_AndroidWidgetsSection> 
           label: info.label,
           packageName: info.packageName,
           appWidgetId: appWidgetId,
+          configureComponent: (bind.configure ?? '').isEmpty
+              ? null
+              : bind.configure,
         );
         if (placed) {
           ref

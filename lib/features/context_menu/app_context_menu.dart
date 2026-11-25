@@ -38,6 +38,7 @@ class MenuActions {
     this.onOpen,
     this.onWallpaper,
     this.onHomeSettings,
+    this.onFocus,
   });
 
   final VoidCallback onAppInfo;
@@ -53,6 +54,7 @@ class MenuActions {
   final VoidCallback? onOpen;
   final VoidCallback? onWallpaper;
   final VoidCallback? onHomeSettings;
+  final VoidCallback? onFocus;
 }
 
 @immutable
@@ -133,6 +135,7 @@ List<_MenuItem> _itemsFor(MenuRequest request) {
       ];
     case MenuContext.emptySpace:
       return [
+        if (a.onFocus != null) _MenuItem('◌', 'Focus session', a.onFocus!),
         _MenuItem('▤', 'Wallpaper & style', a.onWallpaper!),
         _MenuItem('▦', 'Widgets', a.onWidgets),
         _MenuItem('⚙', 'Home settings', a.onHomeSettings!),

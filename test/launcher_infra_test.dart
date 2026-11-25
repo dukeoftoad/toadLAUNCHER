@@ -1,5 +1,7 @@
 library;
 
+import 'dart:convert';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -56,17 +58,22 @@ void main() {
       expect(widgets.first.minWidthPx, 220);
     });
 
-    test('hostWidget returns the bound id; null when refused', () async {
+    test('hostWidget returns the bound result; unbound when refused', () async {
       final bridge = DeviceBridge(channel);
       mock((call) async {
         expect(call.method, 'hostWidget');
         expect(call.arguments, containsPair('providerId', 'a/.W'));
-        return 4242;
+        return {
+          'appWidgetId': 4242,
+          'configure': 'com.example/.Configure',
+        };
       });
-      expect(await bridge.hostWidget('a/.W'), 4242);
+      final bound = await bridge.hostWidget('a/.W');
+      expect(bound.appWidgetId, 4242);
+      expect(bound.needsConfigure, isTrue);
 
       mock((call) async => null);
-      expect(await bridge.hostWidget('a/.W'), isNull);
+      expect((await bridge.hostWidget('a/.W')).appWidgetId, isNull);
     });
 
     test('deleteHostedWidget relays the id', () async {
@@ -230,10 +237,17 @@ void main() {
           .removeWidget('hosted-77', message: 'gone');
 
       expect(bridge.deletedWidgetIds, contains(77));
+      await Future<void>.delayed(const Duration(milliseconds: 20));
       final prefs = await SharedPreferences.getInstance();
+      final payload = jsonDecode(
+        prefs.getString('toadlauncher.hosted.widgets.v1')!,
+      ) as Map;
+      expect(payload['data'], everyElement(isA<Map>()));
       expect(
-        prefs.getString('toadlauncher.hosted.widgets.v1') ?? '',
-        isNot(contains('77')),
+        (payload['data'] as List).where(
+          (item) => '${(item as Map)['appWidgetId']}' == '77',
+        ),
+        isEmpty,
       );
     });
 

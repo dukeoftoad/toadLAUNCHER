@@ -1,16 +1,16 @@
 library;
 
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
-import '../settings/launcher_settings.dart';
+import '../reliability/safe_store.dart';
+import '../../features/focus/focus_controller.dart' show focusAwareSettingsProvider;
 import 'device_bridge.dart';
 
 const String _kPrefsKey = 'toadlauncher.battery.v1';
+final SafeStore _kBatteryStore = SafeStore(_kPrefsKey, schemaVersion: 2);
 
 @immutable
 class BatterySample {
@@ -238,27 +238,24 @@ class BatteryMonitor extends Notifier<BatteryData> {
 
   Future<void> _persist(List<BatterySample> samples) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(
-        _kPrefsKey,
-        jsonEncode([for (final s in samples) s.toJson()]),
-      );
+      await _kBatteryStore.write([for (final s in samples) s.toJson()]);
     } catch (_) {
     }
   }
 
   Future<void> _restore() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString(_kPrefsKey);
-      if (raw == null || raw.isEmpty) return;
-      final list = (jsonDecode(raw) as List<dynamic>)
-          .cast<Map<dynamic, dynamic>>();
-      final samples = [
-        for (final item in list)
-          BatterySample.fromJson(item),
-      ]..removeWhere((s) => s.level < 0 || s.level > 100);
-      if (samples.isEmpty) return;
+      final samples = await _kBatteryStore.read<List<BatterySample>>(
+        (json) {
+          if (json is! List) return null;
+          return [
+            for (final item in json)
+              if (item is Map)
+                BatterySample.fromJson(item.cast<String, Object?>()),
+          ]..removeWhere((s) => s.level < 0 || s.level > 100);
+        },
+      );
+      if (samples == null || samples.isEmpty) return;
       state = state.copyWith(samples: samples);
     } catch (_) {
     }
@@ -267,8 +264,7 @@ class BatteryMonitor extends Notifier<BatteryData> {
   Future<void> clearHistory() async {
     state = state.copyWith(samples: const []);
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_kPrefsKey);
+      await _kBatteryStore.wipe();
     } catch (_) {}
   }
 }
@@ -277,7 +273,7 @@ final NotifierProvider<BatteryMonitor, BatteryData> batteryMonitorProvider =
     NotifierProvider<BatteryMonitor, BatteryData>(BatteryMonitor.new);
 
 final Provider<bool> pondCalmProvider = Provider<bool>((ref) {
-  final settings = ref.watch(launcherSettingsProvider);
+  final settings = ref.watch(focusAwareSettingsProvider);
   if (settings.calmPond) return true;
   if (!settings.lowBatteryCalm) return false;
   final battery = ref.watch(batteryMonitorProvider);

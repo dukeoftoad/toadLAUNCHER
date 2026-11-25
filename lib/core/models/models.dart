@@ -143,6 +143,7 @@ class HomeLayout {
     List<List<HomeCell>>? pages,
     List<AppEntry>? dock,
     List<AppEntry>? recents,
+    List<AppEntry>? allApps,
     List<FolderData>? folders,
     List<PlacedWidget>? widgets,
   }) {
@@ -150,7 +151,7 @@ class HomeLayout {
       pages: pages ?? this.pages,
       dock: dock ?? this.dock,
       recents: recents ?? this.recents,
-      allApps: allApps,
+      allApps: allApps ?? this.allApps,
       folders: folders ?? this.folders,
       memory: memory,
       widgets: widgets ?? this.widgets,
@@ -178,8 +179,11 @@ class PlacedWidget {
     required this.page,
     required this.w,
     required this.h,
+    this.row,
+    this.col,
     this.providerId,
     this.appWidgetId,
+    this.configureComponent,
     this.label,
     this.packageName,
   });
@@ -190,22 +194,39 @@ class PlacedWidget {
   final int w;
   final int h;
 
+  /// Explicit canvas position (FEAT-01). Null = legacy stacked placement,
+  /// resolved to the first free slot top-down at render time.
+  final int? row;
+  final int? col;
+
   final String? providerId;
   final int? appWidgetId;
+
+  /// Flattened ComponentName of the provider's configure activity, when it
+  /// declares one (PLT-07). Enables the bind-time configure flow and the
+  /// edit-mode "Set up" chip.
+  final String? configureComponent;
+
   final String? label;
   final String? packageName;
 
-  PlacedWidget copyWith({int? page, int? w, int? h}) => PlacedWidget(
-    id: id,
-    kind: kind,
-    page: page ?? this.page,
-    w: w ?? this.w,
-    h: h ?? this.h,
-    providerId: providerId,
-    appWidgetId: appWidgetId,
-    label: label,
-    packageName: packageName,
-  );
+  bool get needsPosition => row == null || col == null;
+
+  PlacedWidget copyWith({int? page, int? w, int? h, int? row, int? col}) =>
+      PlacedWidget(
+        id: id,
+        kind: kind,
+        page: page ?? this.page,
+        w: w ?? this.w,
+        h: h ?? this.h,
+        row: row ?? this.row,
+        col: col ?? this.col,
+        providerId: providerId,
+        appWidgetId: appWidgetId,
+        configureComponent: configureComponent,
+        label: label,
+        packageName: packageName,
+      );
 
   @override
   bool operator ==(Object other) => other is PlacedWidget && other.id == id;

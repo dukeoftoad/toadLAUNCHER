@@ -16,9 +16,11 @@ import 'placed_widgets.dart' show widgetZoneHeight;
 const String kToadWidgetViewType = 'toad-widget-host';
 
 class AndroidHostedWidgetView extends StatefulWidget {
-  const AndroidHostedWidgetView({super.key, required this.widget});
+  const AndroidHostedWidgetView({super.key, required this.widget, this.height});
 
   final PlacedWidget widget;
+
+  final double? height;
 
   @override
   State<AndroidHostedWidgetView> createState() =>
@@ -38,7 +40,7 @@ class _AndroidHostedWidgetViewState extends State<AndroidHostedWidgetView> {
           (_) => _maybeReportSize(constraints),
         );
         return SizedBox(
-          height: widgetZoneHeight(widget.h),
+          height: this.widget.height ?? widgetZoneHeight(widget.h),
           width: double.infinity,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -76,7 +78,9 @@ class _AndroidHostedWidgetViewState extends State<AndroidHostedWidgetView> {
 
   void _maybeReportSize(BoxConstraints constraints) {
     final id = widget.widget.appWidgetId;
-    if (id == null || !constraints.hasBoundedWidth || !constraints.hasBoundedHeight) {
+    if (id == null ||
+        !constraints.hasBoundedWidth ||
+        !constraints.hasBoundedHeight) {
       return;
     }
     final dpr = MediaQuery.devicePixelRatioOf(context);

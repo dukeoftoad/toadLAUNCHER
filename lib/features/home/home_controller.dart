@@ -1,19 +1,23 @@
 library;
 
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/models/models.dart';
 import '../../core/device/device_bridge.dart';
+import '../../core/reliability/safe_store.dart';
 import '../../core/repositories/app_repository.dart';
 import '../../core/repositories/device_app_repository.dart';
 import '../../core/settings/launcher_settings.dart';
+import 'grid_flow.dart' show resolveDropAnchor;
 
 const String _kHostedWidgetsKey = 'toadlauncher.hosted.widgets.v1';
+final SafeStore _kHostedStore = SafeStore(
+  _kHostedWidgetsKey,
+  schemaVersion: 2,
+);
 
 final AsyncNotifierProvider<HomeController, HomeLayout> homeLayoutProvider =
     AsyncNotifierProvider<HomeController, HomeLayout>(HomeController.new);
@@ -21,17 +25,27 @@ final AsyncNotifierProvider<HomeController, HomeLayout> homeLayoutProvider =
 class HomeController extends AsyncNotifier<HomeLayout> {
   final List<({HomeLayout layout, LauncherSettings settings})> _undoStack = [];
 
+  bool _refreshing = false;
+
   @override
   Future<HomeLayout> build() async {
     final repo = ref.watch(appRepositoryProvider);
-    final layout = await repo.loadHomeLayout();
+    final settings = ref.read(launcherSettingsProvider);
 
+    HomeLayout layout;
     if (repo is DeviceAppRepository) {
       ref.read(deviceIconsProvider.notifier).state = Map<String, Uint8List>.of(
         repo.iconBytes,
       );
+      ref
+          .read(deviceIconsMonoProvider.notifier)
+          .state = Map<String, Uint8List>.of(repo.iconMonoBytes);
+      layout =
+          await repo.loadFromSnapshot() ?? await repo.loadHomeLayout();
+      unawaited(_refreshFromBridge(repo));
+    } else {
+      layout = await repo.loadHomeLayout();
     }
-    final settings = ref.read(launcherSettingsProvider);
 
     final seeded = <PlacedWidget>[];
     if (!layout.widgets.any((w) => w.kind == WidgetKind.clock)) {
@@ -61,7 +75,11 @@ class HomeController extends AsyncNotifier<HomeLayout> {
       );
     }
 
-    final hosted = await _restoreHosted();
+    var hosted = await _restoreHosted();
+
+    if (hosted.isNotEmpty && repo is DeviceAppRepository) {
+      hosted = await _cleanupHostOrphans(layout, hosted);
+    }
 
     if (seeded.isEmpty) {
       return layout.copyWith(widgets: [...hosted, ...layout.widgets]);
@@ -71,6 +89,70 @@ class HomeController extends AsyncNotifier<HomeLayout> {
       ...hosted,
       ...layout.widgets,
     ]);
+  }
+
+  /// PERF-01: after the snapshot fast path rendered home, quietly re-index
+  /// from PackageManager and re-persist the snapshot. Failures keep the
+  /// snapshot on screen; the device banner surfaces bridge problems.
+  Future<void> _refreshFromBridge(DeviceAppRepository repo) async {
+    if (_refreshing || !ref.read(launcherSettingsProvider).deviceMode) return;
+    _refreshing = true;
+    try {
+      final fresh = await repo.loadHomeLayout();
+      ref.read(deviceIconsProvider.notifier).state = Map<String, Uint8List>.of(
+        repo.iconBytes,
+      );
+      ref
+          .read(deviceIconsMonoProvider.notifier)
+          .state = Map<String, Uint8List>.of(repo.iconMonoBytes);
+      final current = state.value;
+      if (current == null) return;
+      state = AsyncData(
+        current.copyWith(
+          pages: fresh.pages,
+          dock: fresh.dock,
+          recents: fresh.recents,
+          allApps: fresh.allApps,
+          folders: fresh.folders,
+        ),
+      );
+    } catch (_) {
+      // snapshot stays; banner reports bridge trouble
+    } finally {
+      _refreshing = false;
+    }
+  }
+
+  /// PLT-07: reconcile placements against the widget host. Host ids we no
+  /// longer have placements for are freed; placements whose ids the host
+  /// lost are dropped and the survivors re-persisted.
+  Future<List<PlacedWidget>> _cleanupHostOrphans(
+    HomeLayout layout,
+    List<PlacedWidget> hosted,
+  ) async {
+    try {
+      final bridge = ref.read(deviceBridgeProvider);
+      final hostIds = (await bridge.hostedAppWidgetIds()).toSet();
+      final placedIds = hosted
+          .map((w) => w.appWidgetId)
+          .whereType<int>()
+          .toSet();
+      for (final id in hostIds.difference(placedIds)) {
+        await bridge.deleteHostedWidget(id);
+      }
+      final survivors = [
+        for (final w in hosted)
+          if (w.appWidgetId == null || hostIds.contains(w.appWidgetId)) w,
+      ];
+      if (survivors.length != hosted.length) {
+        final next = layout.copyWith(widgets: [...survivors, ...layout.widgets]);
+        await _persistHosted(next);
+        return survivors;
+      }
+      return hosted;
+    } catch (_) {
+      return hosted;
+    }
   }
 
   Future<void> launch(AppEntry app) async {
@@ -219,6 +301,8 @@ class HomeController extends AsyncNotifier<HomeLayout> {
     for (var i = 0; i < a.length; i++) {
       if (a[i].id != b[i].id ||
           a[i].page != b[i].page ||
+          a[i].row != b[i].row ||
+          a[i].col != b[i].col ||
           a[i].w != b[i].w ||
           a[i].h != b[i].h) {
         return false;
@@ -237,7 +321,13 @@ class HomeController extends AsyncNotifier<HomeLayout> {
 
   bool get canUndo => _undoStack.isNotEmpty;
 
-  bool placeWidget(WidgetKind kind, {required int page, int? index}) {
+  bool placeWidget(
+    WidgetKind kind, {
+    required int page,
+    int? index,
+    int? row,
+    int? col,
+  }) {
     final current = state.value;
     if (current == null) return false;
     if (kind != WidgetKind.androidHosted &&
@@ -247,12 +337,24 @@ class HomeController extends AsyncNotifier<HomeLayout> {
 
     final settings = ref.read(launcherSettingsProvider);
     final snap = snapshot();
+    final w = _defaultW(kind, settings);
+    final h = _defaultH(kind, settings);
+    final anchor = resolveDropAnchor(
+      existing: current.widgets.where((x) => x.page == page).toList(),
+      row: row ?? 0,
+      col: col ?? 0,
+      w: w,
+      h: h,
+      columns: settings.gridColumns,
+    );
     final widget = PlacedWidget(
       id: 'widget-${kind.name}-${DateTime.now().microsecondsSinceEpoch}',
       kind: kind,
       page: page,
-      w: _defaultW(kind, settings),
-      h: _defaultH(kind, settings),
+      row: anchor.row,
+      col: anchor.col,
+      w: w,
+      h: h,
     );
     final pageWidgets = [...current.widgets.where((w) => w.page == page)];
     final others = current.widgets.where((w) => w.page != page).toList();
@@ -290,22 +392,38 @@ class HomeController extends AsyncNotifier<HomeLayout> {
   bool placeHostedWidget({
     required int page,
     int? index,
+    int? row,
+    int? col,
     required String providerId,
     required String label,
     required String packageName,
     required int appWidgetId,
+    String? configureComponent,
   }) {
     final current = state.value;
     if (current == null) return false;
+    final settings = ref.read(launcherSettingsProvider);
     final snap = snapshot();
+    final w = 4.clamp(1, settings.gridColumns);
+    final anchor = resolveDropAnchor(
+      existing: current.widgets.where((x) => x.page == page).toList(),
+      row: row ?? 0,
+      col: col ?? 0,
+      w: w,
+      h: 2,
+      columns: settings.gridColumns,
+    );
     final widget = PlacedWidget(
       id: 'hosted-$appWidgetId',
       kind: WidgetKind.androidHosted,
       page: page,
-      w: 4,
+      row: anchor.row,
+      col: anchor.col,
+      w: w,
       h: 2,
       providerId: providerId,
       appWidgetId: appWidgetId,
+      configureComponent: configureComponent,
       label: label,
       packageName: packageName,
     );
@@ -345,6 +463,44 @@ class HomeController extends AsyncNotifier<HomeLayout> {
         .setClockSpan(w: clampedW, h: clampedH);
   }
 
+  ({HomeLayout layout, LauncherSettings settings})? _resizeSnap;
+
+  void beginWidgetGesture() => _resizeSnap = snapshot();
+
+  void endWidgetGesture({String? message}) {
+    final snap = _resizeSnap;
+    _resizeSnap = null;
+    if (snap != null) commitAction(snap, message: message);
+  }
+
+  /// FEAT-01: move a widget on the free-form canvas. The anchor slides down
+  /// from the target like every placement, so the move never overlaps and
+  /// app cells simply re-flow.
+  void moveWidgetTo(
+    String id, {
+    required int row,
+    required int col,
+  }) {
+    final current = state.value;
+    if (current == null) return;
+    final widget = current.widgets.where((w) => w.id == id).firstOrNull;
+    if (widget == null) return;
+    final settings = ref.read(launcherSettingsProvider);
+    final w = widget.w.clamp(1, settings.gridColumns);
+    final safeCol = col.clamp(0, settings.gridColumns - w);
+    final safeRow = row.clamp(0, 1 << 20);
+    if (widget.row == safeRow && widget.col == safeCol) return;
+
+    final next = current.copyWith(
+      widgets: [
+        for (final item in current.widgets)
+          if (item.id == id) item.copyWith(row: safeRow, col: safeCol) else item,
+      ],
+    );
+    state = AsyncData(next);
+    _persistHosted(next);
+  }
+
   void moveWidget(String id, {required int newIndex}) {
     final current = state.value;
     if (current == null) return;
@@ -381,42 +537,49 @@ class HomeController extends AsyncNotifier<HomeLayout> {
     'id': w.id,
     'providerId': w.providerId,
     'appWidgetId': w.appWidgetId,
+    'configure': w.configureComponent,
     'label': w.label,
     'packageName': w.packageName,
     'page': w.page,
+    'row': w.row,
+    'col': w.col,
     'w': w.w,
     'h': w.h,
   };
 
   Future<void> _persistHosted(HomeLayout layout) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
       final hosted = layout.widgets
           .where((w) => w.kind == WidgetKind.androidHosted)
           .map(_hostedToJson)
           .toList();
-      await prefs.setString(_kHostedWidgetsKey, jsonEncode(hosted));
+      await _kHostedStore.write(hosted);
     } catch (_) {
     }
   }
 
   Future<List<PlacedWidget>> _restoreHosted() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString(_kHostedWidgetsKey);
-      if (raw == null || raw.isEmpty) return const [];
-      final list = (jsonDecode(raw) as List<dynamic>).cast<Map<dynamic, dynamic>>();
+      final list = await _kHostedStore.read<List<Object?>>(
+        (json) => json is List ? json : null,
+      );
+      if (list == null) return const [];
       return [
         for (final item in list)
-          if (item['appWidgetId'] != null && item['providerId'] != null)
+          if (item is Map &&
+              item['appWidgetId'] != null &&
+              item['providerId'] != null)
             PlacedWidget(
               id: item['id'] as String? ?? 'hosted-${item['appWidgetId']}',
               kind: WidgetKind.androidHosted,
               page: (item['page'] as num?)?.toInt() ?? 0,
+              row: (item['row'] as num?)?.toInt(),
+              col: (item['col'] as num?)?.toInt(),
               w: ((item['w'] as num?)?.toInt() ?? 4).clamp(2, 4),
               h: ((item['h'] as num?)?.toInt() ?? 2).clamp(1, 4),
               providerId: item['providerId'] as String?,
               appWidgetId: (item['appWidgetId'] as num?)?.toInt(),
+              configureComponent: item['configure'] as String?,
               label: item['label'] as String?,
               packageName: item['packageName'] as String?,
             ),

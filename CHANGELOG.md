@@ -3,6 +3,73 @@
 The format follows keep-a-changelog; versions follow `pubspec.yaml`
 (the single source of truth — CI derives release names from it).
 
+## [1.2.0] — stabilization and the free-form pond
+
+Phase 1 (stabilization) and Phase 2 (free-form canvas) of the roadmap
+(roadmap.md); findings and evidence in docs/verification-report.md.
+
+### Reliability & data (Phase 1)
+- **REL-02 — persistence is atomic and versioned.** A two-generation
+  `SafeStore` writer now wraps every JSON blob (settings, hosted-widget
+  placements, toadLIST, battery samples): schema version inside the
+  payload, a last-good mirror slot, validation on read. A corrupt or
+  half-migrated payload falls back to the previous good state instead of
+  silently resetting to defaults. v1.1.0-era payloads are read as-is and
+  migrate on the next save.
+
+### Performance (Phase 1)
+- **PERF-01 — fast cold start.** The app index and icons persist to a
+  snapshot in the app-private dir; cold start renders home from files
+  before PackageManager is ever asked, then re-indexes quietly in the
+  background and re-persists. Package events keep it fresh; a corrupt
+  snapshot falls through to the live index. Numbers in docs/PERF.md.
+- **PERF-02 — icon pipeline.** Native per-package icon disk cache keyed by
+  `packageId + lastUpdateTime` (unchanged apps skip decode entirely),
+  raster tightened 96 px/90 → 72 px/85 — smaller channel payload,
+  imperceptible at launcher sizes.
+
+### Platform correctness (Phase 1 + 2)
+- **PLT-07 — widget checklist complete.** Widgets that declare a configure
+  activity now launch it right after binding (cancel frees the id, the
+  widget never lands half-configured); placed widgets with a configure
+  activity get a **Set up** chip in edit mode; orphaned host ids are
+  freed at startup and placements whose ids the host lost are dropped;
+  bind now carries size options.
+- **PLT-08 — Home-press behavior.** Pressing Home while already here peels
+  exactly one overlay (placement ghost → menu → folder → drawer → edit
+  mode) and, with a clear desk, walks back to page 1.
+- **PLT-14 — themed icons.** The monochrome layer of adaptive icons
+  (Android 13+) is rasterized and shipped per package; Settings → Home
+  screen → *Themed icons* renders them in the palette's ink on paper.
+  Apps without the layer keep their color icons.
+
+### The free-form pond (Phase 2, FEAT-01)
+- **One shared canvas per page.** Android and toad widgets claim
+  rectangular spans at explicit (row, col); app and folder cells flow
+  into every cell left free. Drag a widget anywhere in edit mode, pull
+  its corners to resize (now for every kind, not just the clock), drop a
+  new widget exactly where you aimed — collisions slide down, apps
+  re-flow, nothing ever overlaps. The grid skeleton, hint bubble and
+  page dots follow the same geometry.
+- Per-app free placement, drawer drag-in and drop-to-create-folders stay
+  Phase 3 (FEAT-01b), as recorded in the roadmap.
+
+### Focus tools (Phase 2, FEAT-10)
+- **Focus session** (long-press empty space → *Focus session*): dots,
+  badges and the memories card hide, the pond calms and rain stops for
+  15/25/45/60 minutes (Settings → Home screen). One quiet countdown chip
+  marks the session; tapping it ends early; a real timer always ends it.
+
+### Accessibility
+- **A11Y-01 — semantics pass.** App icons, folder tiles, dock, page dots,
+  the edit strip, placed-widget chrome and the focus chip now carry
+  labels for screen readers (spoken folder contents included).
+
+### Build & docs
+- roadmap.md restored as the source of truth (Phase 1/2 marked shipped,
+  Phase 3 planned: FEAT-01b, icon packs, I18N, tablet, work profile).
+- docs/PERF.md — budgets, protocol and honest first measurements.
+
 ## [1.1.0] — trust, recovery, and the four clocks
 
 Phase 0 of the audit roadmap (docs/verification-report.md) plus the hero

@@ -1,14 +1,16 @@
 library;
 
+import 'package:flutter/foundation.dart' show Uint8List;
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/device/device_bridge.dart' show notificationCountsProvider;
 import '../../core/models/models.dart';
 import '../../core/repositories/device_app_repository.dart';
-import '../../core/settings/launcher_settings.dart';
 import '../../core/theme/toad_tokens.dart';
 import '../../core/theme/toad_theme.dart';
+import '../../features/focus/focus_controller.dart'
+    show focusAwareSettingsProvider;
 
 class ToadAppIcon extends ConsumerWidget {
   const ToadAppIcon({
@@ -34,68 +36,77 @@ class ToadAppIcon extends ConsumerWidget {
       IconShape.rounded => size * 0.38,
     };
 
+    final settings = ref.watch(focusAwareSettingsProvider);
     final realIcon = app.packageName == null
         ? null
         : ref.watch(deviceIconsProvider)[app.packageName!];
+    final monoIcon = settings.themedIcons && app.packageName != null
+        ? ref.watch(deviceIconsMonoProvider)[app.packageName!]
+        : null;
 
     final gradient = app.isFamilyToad && realIcon == null
         ? AppIconGradients.toad
         : AppIconGradients.all[app.gradientIndex % AppIconGradients.all.length];
 
-    final settings = ref.watch(launcherSettingsProvider);
     final count = settings.notificationDots && app.packageName != null
         ? (ref.watch(notificationCountsProvider)[app.packageName!] ?? 0)
         : 0;
 
-    final tile = Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(effectiveRadius),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: gradient,
-          transform: const GradientRotation(145 * 3.14159 / 180),
-        ),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x47000000),
-            offset: Offset(0, 3),
-            blurRadius: 8,
-            spreadRadius: -2,
-          ),
-        ],
-      ),
-      child: Center(
-        child: realIcon != null
-            ? ClipRRect(
-                borderRadius: BorderRadius.circular(effectiveRadius),
-                child: Image.memory(
-                  realIcon,
-                  width: size,
-                  height: size,
-                  fit: BoxFit.cover,
-                  gaplessPlayback: true,
-                ),
-              )
-            : app.isFamilyToad
-            ? CustomPaint(
-                size: Size.square(size * 0.5),
-                painter: ToadFacePainter(),
-              )
-            : Text(
-                app.glyph,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: glyphSize,
-                  height: 1,
-                  color: Colors.white,
-                  fontFamily: ToadType.fontHand,
-                ),
+    final Widget tile = monoIcon != null
+        ? _ThemedMonoIcon(
+            bytes: monoIcon,
+            size: size,
+            radius: effectiveRadius,
+          )
+        : Container(
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(effectiveRadius),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: gradient,
+                transform: const GradientRotation(145 * 3.14159 / 180),
               ),
-      ),
-    );
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x47000000),
+                  offset: Offset(0, 3),
+                  blurRadius: 8,
+                  spreadRadius: -2,
+                ),
+              ],
+            ),
+            child: Center(
+              child: realIcon != null
+                  ? ClipRRect(
+                      borderRadius: BorderRadius.circular(effectiveRadius),
+                      child: Image.memory(
+                        realIcon,
+                        width: size,
+                        height: size,
+                        fit: BoxFit.cover,
+                        gaplessPlayback: true,
+                      ),
+                    )
+                  : app.isFamilyToad
+                  ? CustomPaint(
+                      size: Size.square(size * 0.5),
+                      painter: ToadFacePainter(),
+                    )
+                  : Text(
+                      app.glyph,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: glyphSize,
+                        height: 1,
+                        color: Colors.white,
+                        fontFamily: ToadType.fontHand,
+                      ),
+                    ),
+            ),
+          );
 
     if (count <= 0) return tile;
 
@@ -138,6 +149,44 @@ class ToadAppIcon extends ConsumerWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _ThemedMonoIcon extends ConsumerWidget {
+  const _ThemedMonoIcon({
+    required this.bytes,
+    required this.size,
+    required this.radius,
+  });
+
+  final Uint8List bytes;
+  final double size;
+  final double radius;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final palette = ToadTheme.of(context).palette;
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: palette.surface.withValues(alpha: palette.surface.a * 0.9),
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(
+          color: palette.hairline.withValues(alpha: palette.hairline.a * 0.9),
+        ),
+      ),
+      padding: EdgeInsets.all(size * 0.16),
+      child: ColorFiltered(
+        colorFilter: ColorFilter.matrix(<double>[
+          0, 0, 0, 0, palette.ink.r * 255,
+          0, 0, 0, 0, palette.ink.g * 255,
+          0, 0, 0, 0, palette.ink.b * 255,
+          0, 0, 0, 1, 0,
+        ]),
+        child: Image.memory(bytes, fit: BoxFit.contain, gaplessPlayback: true),
+      ),
     );
   }
 }

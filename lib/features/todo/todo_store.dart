@@ -1,12 +1,12 @@
 library;
 
-import 'dart:convert';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../core/reliability/safe_store.dart';
 
 const String _kPrefsKey = 'toadlauncher.todolist.v1';
+final SafeStore _kTodoStore = SafeStore(_kPrefsKey, schemaVersion: 2);
 
 @immutable
 class ToadComment {
@@ -195,27 +195,23 @@ class TodoController extends Notifier<List<ToadTask>> {
 
   Future<void> _persist() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(
-        _kPrefsKey,
-        jsonEncode([for (final t in state) t.toJson()]),
-      );
+      await _kTodoStore.write([for (final t in state) t.toJson()]);
     } catch (_) {
     }
   }
 
   Future<void> _restore() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString(_kPrefsKey);
-      if (raw == null || raw.isEmpty) return;
-      final list = (jsonDecode(raw) as List<dynamic>)
-          .cast<Map<dynamic, dynamic>>();
-      final tasks = [
-        for (final item in list)
-          ToadTask.fromJson(item),
-      ]..removeWhere((t) => t.title.isEmpty);
-      if (tasks.isEmpty) return;
+      final tasks = await _kTodoStore.read<List<ToadTask>>(
+        (json) {
+          if (json is! List) return null;
+          return [
+            for (final item in json)
+              if (item is Map) ToadTask.fromJson(item.cast<String, Object?>()),
+          ]..removeWhere((t) => t.title.isEmpty);
+        },
+      );
+      if (tasks == null || tasks.isEmpty) return;
       if (state.isNotEmpty) return;
       state = tasks;
     } catch (_) {

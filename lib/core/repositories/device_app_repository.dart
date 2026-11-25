@@ -1,5 +1,6 @@
 library;
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -10,6 +11,7 @@ import '../device/device_bridge.dart';
 import '../device/toad_family.dart';
 import '../models/models.dart';
 import 'app_repository.dart';
+import 'app_snapshot_store.dart';
 
 const String _kRecentsKey = 'toadlauncher.recents.v1';
 
@@ -31,7 +33,11 @@ class DeviceAppRepository implements AppRepository {
 
   final bool usageOptIn;
 
+  final AppSnapshotStore snapshotStore = AppSnapshotStore();
+
   final Map<String, Uint8List> iconBytes = {};
+
+  final Map<String, Uint8List> iconMonoBytes = {};
 
   List<AppEntry> _allApps = const [];
 
@@ -40,6 +46,7 @@ class DeviceAppRepository implements AppRepository {
     final deviceApps = await bridge.listApps();
 
     iconBytes.clear();
+    iconMonoBytes.clear();
     final entries = <AppEntry>[];
     for (final app in deviceApps) {
       final family = isToadFamilyPackage(app.packageId);
@@ -47,6 +54,9 @@ class DeviceAppRepository implements AppRepository {
           ? (toadFamilyDisplayName(app.packageId) ?? app.label)
           : app.label;
       if (app.iconPng != null) iconBytes[app.packageId] = app.iconPng!;
+      if (app.iconMonoPng != null) {
+        iconMonoBytes[app.packageId] = app.iconMonoPng!;
+      }
       entries.add(
         AppEntry(
           id: app.packageId,
@@ -65,6 +75,85 @@ class DeviceAppRepository implements AppRepository {
     );
     _allApps = List.unmodifiable(entries);
 
+    final layout = await _layoutFromApps(columnsPerRow);
+
+    unawaited(
+      snapshotStore.save(
+        apps: deviceApps,
+        dockIds: [for (final a in layout.dock) a.id],
+        recentIds: [for (final a in layout.recents) a.id],
+      ),
+    );
+
+    return layout;
+  }
+
+  /// PERF-01 fast path: build the home layout from the persisted snapshot
+  /// without touching PackageManager. Returns null when no valid snapshot
+  /// exists (first run, cleared data, corrupt payload).
+  Future<HomeLayout?> loadFromSnapshot({int columnsPerRow = 4}) async {
+    final index = await snapshotStore.load();
+    if (index == null) return null;
+
+    iconBytes.clear();
+    iconMonoBytes.clear();
+    final entries = <AppEntry>[];
+    for (final app in index.apps) {
+      final family = app.isFamily || isToadFamilyPackage(app.packageId);
+      final display = family
+          ? (toadFamilyDisplayName(app.packageId) ?? app.label)
+          : app.label;
+      if (app.iconPng != null) iconBytes[app.packageId] = app.iconPng!;
+      if (app.iconMonoPng != null) {
+        iconMonoBytes[app.packageId] = app.iconMonoPng!;
+      }
+      entries.add(
+        AppEntry(
+          id: app.packageId,
+          name: display,
+          glyph: family
+              ? ''
+              : (display.isEmpty ? '?' : display.substring(0, 1).toUpperCase()),
+          gradientIndex: _stableGradient(app.packageId),
+          isFamilyToad: family,
+          packageName: app.packageId,
+        ),
+      );
+    }
+    entries.sort(
+      (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+    );
+    _allApps = List.unmodifiable(entries);
+    return _layoutFromApps(
+      columnsPerRow,
+      dockIds: index.dockIds,
+      recentIds: index.recentIds,
+    );
+  }
+
+  Future<void> persistSnapshot(HomeLayout layout) async {
+    final deviceApps = [
+      for (final entry in _allApps)
+        DeviceApp(
+          packageId: entry.id,
+          label: entry.name,
+          iconPng: iconBytes[entry.id],
+          iconMonoPng: iconMonoBytes[entry.id],
+          isFamily: entry.isFamilyToad,
+        ),
+    ];
+    await snapshotStore.save(
+      apps: deviceApps,
+      dockIds: [for (final a in layout.dock) a.id],
+      recentIds: [for (final a in layout.recents) a.id],
+    );
+  }
+
+  Future<HomeLayout> _layoutFromApps(
+    int columnsPerRow, {
+    List<String>? dockIds,
+    List<String>? recentIds,
+  }) async {
     final all = List<AppEntry>.from(_allApps);
     final familyApps = all.where((a) => a.isFamilyToad).toList();
 
@@ -90,8 +179,12 @@ class DeviceAppRepository implements AppRepository {
 
     return HomeLayout(
       pages: pages,
-      dock: _dockFrom(all),
-      recents: await _recentsFrom(all),
+      dock: dockIds != null
+          ? _dockFromIds(all, dockIds)
+          : _dockFrom(all),
+      recents: recentIds != null
+          ? _appsFromIds(all, recentIds).take(4).toList()
+          : await _recentsFrom(all),
       allApps: all,
       folders: familyApps.length >= 2
           ? [
@@ -145,6 +238,22 @@ class DeviceAppRepository implements AppRepository {
       h = (h * 31 + c) & 0x7fffffff;
     }
     return h % 8;
+  }
+
+  List<AppEntry> _appsFromIds(List<AppEntry> all, List<String> ids) => [
+    for (final id in ids)
+      if (all.where((a) => a.id == id).firstOrNull != null)
+        all.where((a) => a.id == id).firstOrNull!,
+  ];
+
+  List<AppEntry> _dockFromIds(List<AppEntry> all, List<String> ids) {
+    final dock = _appsFromIds(all, ids);
+    if (dock.length >= 4) return dock.take(4).toList();
+    for (final a in all) {
+      if (dock.length >= 4) break;
+      if (!dock.contains(a) && a.id != 'resident') dock.add(a);
+    }
+    return dock.take(4).toList();
   }
 
   List<AppEntry> _dockFrom(List<AppEntry> all) {
@@ -211,6 +320,9 @@ class DeviceAppRepository implements AppRepository {
 }
 
 final StateProvider<Map<String, Uint8List>> deviceIconsProvider =
+    StateProvider<Map<String, Uint8List>>((ref) => const {});
+
+final StateProvider<Map<String, Uint8List>> deviceIconsMonoProvider =
     StateProvider<Map<String, Uint8List>>((ref) => const {});
 
 bool familyInstalledBeyondLauncher(HomeLayout layout) =>

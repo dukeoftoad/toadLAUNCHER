@@ -250,6 +250,7 @@ void main() {
     await gesture.moveBy(const Offset(0, 90));
     await gesture.moveBy(const Offset(0, 90));
     await gesture.moveBy(const Offset(0, 90));
+    await gesture.moveBy(const Offset(0, 90));
     await gesture.up();
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pump(const Duration(milliseconds: 400));
