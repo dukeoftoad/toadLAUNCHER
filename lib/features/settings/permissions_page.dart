@@ -79,9 +79,35 @@ class _PermissionsPageState extends ConsumerState<PermissionsPage> {
   /// Open a toggle, wait for the user to flip it there, then re-check.
   /// The user coming back to the launcher is the signal Android gave us;
   /// a short settle delay keeps ROMs that write the setting late honest.
+  ///
+  /// PLT-01: on Android 13+ sideloads, Notification access and the lock
+  /// service sit behind "Restricted settings" — the pre-step opens App
+  /// info with the three-tap guide FIRST, then the real toggle.
   Future<void> _askAndGrant(
     ToadAsk Function(Future<void> Function()) make,
   ) async {
+    final bridge = ref.read(deviceBridgeProvider);
+
+    // The restricted pre-step, when the platform needs it.
+    final restrictedProne =
+        make == askNotificationAccess || make == askLockService;
+    var guideShown = false;
+    if (restrictedProne && mounted) {
+      final sdk = await bridge.osSdkInt();
+      final currentlyGranted = _statusOf(make) == true;
+      if (sdk >= 33 && !currentlyGranted && mounted) {
+        guideShown = true;
+        final unlocked = await showToadAsk(
+          context,
+          askRestrictedSettings(
+            () => bridge.appDetails('family.toad.launcher'),
+          ),
+        );
+        if (!unlocked || !mounted) return;
+      }
+    }
+
+    if (!mounted) return;
     final proceeded = await showToadAsk(
       context,
       make(() async {
@@ -97,16 +123,16 @@ class _PermissionsPageState extends ConsumerState<PermissionsPage> {
     if (!mounted) return;
     final status = _statusOf(make);
     if (status == null) return;
+    final retryTip = !status && guideShown
+        ? 'If the switch was greyed out: App info → ⋮ → "Allow restricted '
+              'settings", then try again'
+        : 'Still off — flip the toggle and come back';
     ScaffoldMessenger.of(context)
       ..clearSnackBars()
       ..showSnackBar(
         toadToast(
           context,
-          ToastEvent(
-            status
-                ? 'Granted — thank you'
-                : 'Still off — flip the toggle and come back',
-          ),
+          ToastEvent(status ? 'Granted — thank you' : retryTip),
         ),
       );
   }

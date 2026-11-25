@@ -163,6 +163,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     if (clock != null) _launch(clock);
   }
 
+  /// PLT-03 — the two-finger screenshot, finally real: the accessibility
+  /// service's global action (same consent as the lock, API 28+). Honest
+  /// when unavailable: the ask explains, the demo says so.
+  Future<void> _takeScreenshot() async {
+    final repo = ref.read(appRepositoryProvider);
+    if (repo is! DeviceAppRepository) {
+      _toast(
+        'Two-finger screenshot needs a real device — the demo keeps '
+        'your pixels',
+      );
+      return;
+    }
+    final bridge = ref.read(deviceBridgeProvider);
+    final ok = await bridge.takeScreenshot();
+    if (ok || !mounted) return;
+    await showToadAsk(
+      context,
+      askLockService(bridge.openAccessibilitySettings),
+    );
+  }
+
   /// Locate a cell by id across the pages (folders included).
   (int, int)? _locateCell(String id) {
     final layout = ref.read(homeLayoutProvider).valueOrNull;
@@ -448,10 +469,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       final settings = ref.read(launcherSettingsProvider);
       if (settings.twoFingerScreenshot && !_overlayBusy) {
         _twoFingerFired = true;
-        _toast(
-          'Two-finger screenshot needs a real device — the demo keeps '
-          'your pixels',
-        );
+        _takeScreenshot();
       }
     }
     if (_activePointers.length == 2) {

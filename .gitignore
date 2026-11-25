@@ -49,3 +49,16 @@ app.*.map.json
 
 # Generated at build time by the Flutter tool (v1-style copies break modern builds)
 android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java
+
+# Signing material NEVER lives in the tree (SEC-01): keystores and their
+# properties are GitHub Actions secrets; the rotation lineage
+# (android/toad-lineage.bin) is public by design — it ships inside every
+# signed APK.
+android/key.properties
+android/app/*.jks
+android/*.jks
+*.keystore
+
+# Machine-specific Android SDK path.
+android/local.properties
+android/.gradle/

@@ -39,7 +39,11 @@ import io.flutter.plugin.platform.PlatformViewFactory
 import org.json.JSONObject
 import java.io.File
 import java.io.InputStream
+import java.security.KeyFactory
 import java.security.MessageDigest
+import java.security.Signature
+import java.security.spec.X509EncodedKeySpec
+import java.util.Base64
 import java.util.concurrent.Executors
 
 /**
@@ -68,6 +72,10 @@ class MainActivity : FlutterActivity() {
     private var channel: MethodChannel? = null
     private var pendingWallpaperResult: MethodChannel.Result? = null
     private var widgetHost: AppWidgetHost? = null
+
+    /** Live hosted views by appWidgetId — resize notifications (PLT-07)
+     *  reach the real AppWidgetHostView through this map. */
+    private val hostedViews = HashMap<Int, android.widget.FrameLayout>()
 
     /** Index refresh: installs / updates / removals land here live. */
     private val packageEvents = object : BroadcastReceiver() {
@@ -199,6 +207,34 @@ class MainActivity : FlutterActivity() {
                 "openUrl" -> onMain(result) {
                     openUrl(call.argument<String>("url") ?: "")
                 }
+                // SEC-02: verify the release's detached update signature.
+                "verifyUpdateSignature" -> onMain(result) {
+                    verifyUpdateSignature(
+                        call.argument<String>("message") ?: "",
+                        call.argument<String>("signature") ?: "",
+                    )
+                }
+                // REL-01: local crash-log + diagnostics support.
+                "appFilesDir" -> result.success(filesDir.absolutePath)
+                "signingCertFingerprint" -> onMain(result) { signingCertFingerprint() }
+                "openHomeSettings" -> onMain(result) { openHomeSettings() }
+                "shareDiagnosticsFile" -> onMain(result) {
+                    shareDiagnosticsFile(call.argument<String>("path") ?: "")
+                }
+                // PLT-01: the ask flow adapts to the platform version
+                // (Restricted Settings arrive on Android 13).
+                "osSdkInt" -> result.success(Build.VERSION.SDK_INT)
+                // PLT-07: tell a hosted widget its new size (responsive
+                // widgets re-render when the span changes).
+                "resizeHostedWidget" -> onMain(result) {
+                    resizeHostedWidget(
+                        (call.arguments as Map<*, *>)["appWidgetId"] as Number,
+                        (call.arguments as Map<*, *>)["widthDp"] as Number,
+                        (call.arguments as Map<*, *>)["heightDp"] as Number,
+                    )
+                }
+                // PLT-03: real screenshot through the lock service.
+                "takeScreenshot" -> onMain(result) { takeScreenshot() }
                 else -> result.notImplemented()
             }
         }
@@ -210,6 +246,7 @@ class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ToadNotificationListener.startWatching()
+        sweepStaleDownloads()
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_PACKAGE_ADDED)
             addAction(Intent.ACTION_PACKAGE_REPLACED)
@@ -629,6 +666,42 @@ class MainActivity : FlutterActivity() {
         if (apkUrl.isNullOrEmpty()) throw IllegalStateException("noApkAsset")
 
         var sha256: String? = null
+        var sig: String? = null
+        var sigAssetUrl: String? = null
+        for (i in 0 until assets.length()) {
+            val a = assets.getJSONObject(i)
+            val name = a.optString("name")
+            if (name.endsWith(".apk.sha256")) {
+                shaAssetUrl = a.optString("browser_download_url")
+                continue
+            }
+            if (name.endsWith(".apk.sig")) {
+                sigAssetUrl = a.optString("browser_download_url")
+                continue
+            }
+            if (!name.endsWith(".apk", ignoreCase = true)) continue
+            if (anyApkUrl == null) {
+                anyApkName = name
+                anyApkUrl = a.optString("browser_download_url")
+                anyApkSize = a.optLong("size")
+            }
+            // Prefer the asset that names the launcher, but never depend on
+            // exact naming — a renamed asset must not break the update
+            // (the old contains("toadlauncher") filter threw noApkAsset
+            // whenever the release asset carried a different name).
+            if (apkUrl == null && name.contains("launcher", ignoreCase = true)) {
+                apkName = name
+                apkUrl = a.optString("browser_download_url")
+                apkSize = a.optLong("size")
+            }
+        }
+        if (apkUrl.isNullOrEmpty()) {
+            apkName = anyApkName
+            apkUrl = anyApkUrl
+            apkSize = anyApkSize
+        }
+        if (apkUrl.isNullOrEmpty()) throw IllegalStateException("noApkAsset")
+
         if (shaAssetUrl != null) {
             try {
                 val shaId = newDownload(
@@ -645,6 +718,19 @@ class MainActivity : FlutterActivity() {
                 // checksum optional — installer says so honestly
             }
         }
+        if (sigAssetUrl != null) {
+            try {
+                val sigId = newDownload(
+                    sigAssetUrl, "toadLAUNCHER signature", "update.sig", false, "application/octet-stream",
+                )
+                if (awaitDownload(sigId, timeoutMs = 15_000) == DownloadManager.STATUS_SUCCESSFUL) {
+                    sig = readDownload(sigId)?.let { String(it) }?.trim()
+                }
+            } catch (e: Exception) {
+                // Signature missing → the Dart engine refuses the update
+                // (honest error, release-page handoff).
+            }
+        }
 
         return mapOf(
             "tagName" to json.optString("tag_name"),
@@ -654,7 +740,38 @@ class MainActivity : FlutterActivity() {
             "apkUrl" to apkUrl,
             "apkSizeBytes" to apkSize,
             "sha256" to sha256,
+            "sig" to sig,
         )
+    }
+
+    /** APK signing certificates we accept for updates: the lineage root
+     *  (v0.9 → v1.0 key, retired, no rollback capability) and the current
+     *  key. Anything else is an impersonation attempt. */
+    private val expectedApkCertSha256 = setOf(
+        "6ae99f0bb980b0cb6bc707bff4a6659ade18947e9db203946193c514c200702a",
+        "5fdadde01fdf2517a70aac86f315887cb79b74a0d478796f0d4bf40ccb7ac6b6",
+    )
+
+    /** SHA-256 hex of the APK's signing certificate, or null when it
+     *  cannot be parsed. Streams to a cache temp file because
+     *  getPackageArchiveInfo needs a filesystem path. */
+    private fun apkSignerCertHex(uri: Uri): String? {
+        return try {
+            val tmp = File(cacheDir, "verify-update.apk")
+            contentResolver.openInputStream(uri)?.use { input ->
+                tmp.outputStream().use { output -> input.copyTo(output) }
+            } ?: return null
+            val info = packageManager.getPackageArchiveInfo(
+                tmp.absolutePath,
+                PackageManager.GET_SIGNATURES,
+            )
+            tmp.delete()
+            val sig = info?.signatures?.firstOrNull() ?: return null
+            sig.toByteArray().joinToString("") { "%02x".format(it) }
+        } catch (e: Exception) {
+            Log.w(TAG, "APK cert parse failed", e)
+            null
+        }
     }
 
     /** APK → the APP-PRIVATE updates dir (toadFILES' proven layout). From
@@ -766,7 +883,11 @@ class MainActivity : FlutterActivity() {
      *  whole APK, never registered its status receiver, died quietly on
      *  ROMs that refuse mutable PendingIntents, and referenced
      *  PackageInstaller WITHOUT its import (the committed tree could not
-     *  even compile — the true "update is broken" root). */
+     *  even compile — the true "update is broken" root).
+     *
+     *  SEC-02: the APK's signing certificate must be one of ours (the
+     *  lineage root or the current key) — a correctly-hashed APK signed by
+     *  anyone else is rejected before the installer ever sees it. */
     private fun installDownloadedApk(id: Number, expectedSha256: String?): String {
         val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
         val uri = dm.getUriForDownloadedFile(id.toLong()) ?: return "failed"
@@ -790,6 +911,13 @@ class MainActivity : FlutterActivity() {
                 Log.w(TAG, "checksum stream failed", e)
                 return "failed"
             }
+        }
+
+        // SEC-02: signer certificate gate.
+        val certHex = apkSignerCertHex(uri)
+        if (certHex == null || certHex !in expectedApkCertSha256) {
+            Log.w(TAG, "update APK signer certificate mismatch")
+            return "wrongCertificate"
         }
 
         // "Install unknown apps" gate — open the exact settings toggle;
@@ -832,6 +960,136 @@ class MainActivity : FlutterActivity() {
         return try {
             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
             true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // SEC-02 — the update trust chain. The release's detached signature
+    // (ECDSA P-256 over "tagName|sha256|assetName") is verified with the
+    // UPDATE-signing public key embedded below — a separate key from the
+    // APK signing key, held only in CI secrets. A tampered hash, a
+    // tampered signature or a wrong-asset swap all fail here, BEFORE the
+    // banner ever says "update available".
+    // ------------------------------------------------------------------
+
+    /** The update-signing public key (X.509 SPKI, base64). Private half
+     *  lives only in the repo's CI secrets. Fingerprint printed in
+     *  SECURITY.md. */
+    private val updateSigningPublicKeyB64 =
+        "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEaQeJVytfG0WM4Y4W1w6kBq37zee6cyVJ9Lt" +
+            "/EqYxe1UdP4g95Ty9KHv21TiDbYyChWODrDAjXxvrNJpEjY0Vsg=="
+
+    fun verifyUpdateSignature(message: String, signatureBase64: String): Boolean {
+        return try {
+            val keyBytes = Base64.getDecoder().decode(updateSigningPublicKeyB64)
+            val publicKey = KeyFactory.getInstance("EC")
+                .generatePublic(X509EncodedKeySpec(keyBytes))
+            val sigBytes = Base64.getDecoder().decode(signatureBase64.trim())
+            val verifier = Signature.getInstance("SHA256withECDSA")
+            verifier.initVerify(publicKey)
+            verifier.update(message.toByteArray(Charsets.UTF_8))
+            verifier.verify(sigBytes)
+        } catch (e: Exception) {
+            Log.w(TAG, "update signature verification failed", e)
+            false
+        }
+    }
+
+    /** SHA-256 hex of our own signing certificate (Settings → About shows
+     *  it so users can cross-check against SECURITY.md). */
+    private fun signingCertFingerprint(): String? {
+        return try {
+            val info = packageManager.getPackageInfo(packageName, PackageManager.GET_SIGNATURES)
+            val sig = info.signatures?.firstOrNull() ?: return null
+            sig.toByteArray().joinToString("") { "%02x".format(it) }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /** SEC-03: delete update leftovers older than a week — the updates dir
+     *  never accumulates stale APKs (install handoffs that never completed,
+     *  old versions after a successful update). */
+    private fun sweepStaleDownloads() {
+        executor.execute {
+            try {
+                val dir = appPrivateUpdatesDir()
+                val week = 7L * 24 * 60 * 60 * 1000
+                val now = System.currentTimeMillis()
+                dir.listFiles()?.forEach { f ->
+                    if (now - f.lastModified() > week) f.delete()
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "update sweep failed", e)
+            }
+        }
+    }
+
+    /** REL-01: the system Home picker (safe mode's escape hatch). */
+    private fun openHomeSettings(): Boolean {
+        return try {
+            startActivity(Intent(Settings.ACTION_HOME_SETTINGS))
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /** REL-01: share the local crash log via the system sheet — the file
+     *  never leaves the phone unless the user chooses a target. Shared as
+     *  plain text (the log is text), so no file provider is needed. */
+    private fun shareDiagnosticsFile(path: String): Boolean {
+        return try {
+            val file = File(path)
+            if (!file.exists()) return false
+            // Bound the payload: share the tail (most recent entries).
+            val bytes = file.readBytes()
+            val text = if (bytes.size > 200_000) {
+                "…(older entries trimmed)\n" + String(bytes, bytes.size - 200_000, 200_000, Charsets.UTF_8)
+            } else {
+                String(bytes, Charsets.UTF_8)
+            }
+            val send = Intent(Intent.ACTION_SEND)
+                .setType("text/plain")
+                .putExtra(Intent.EXTRA_SUBJECT, "toadLAUNCHER crash log")
+                .putExtra(Intent.EXTRA_TEXT, text)
+            startActivity(Intent.createChooser(send, "Share crash log"))
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    // PLT-07: forward a size change to the real AppWidgetHostView so
+    // responsive widgets re-render at the right size.
+    private fun resizeHostedWidget(appWidgetId: Number, widthDp: Number, heightDp: Number): Boolean {
+        return try {
+            val container = hostedViews[appWidgetId.toInt()] ?: return false
+            val view = container.getChildAt(0) as? android.appwidget.AppWidgetHostView
+                ?: return false
+            val options = android.os.Bundle()
+            view.updateAppWidgetSize(
+                options,
+                widthDp.toInt(),
+                heightDp.toInt(),
+                widthDp.toInt(),
+                heightDp.toInt(),
+            )
+            true
+        } catch (e: Exception) {
+            Log.w(TAG, "resizeHostedWidget failed", e)
+            false
+        }
+    }
+
+    /** PLT-03: the two-finger screenshot, finally real — the accessibility
+     *  service's global action (API 28+), same consent as the lock. */
+    private fun takeScreenshot(): Boolean {
+        val service = ToadLockService.instance ?: return false
+        return try {
+            service.takeScreenshot()
         } catch (e: Exception) {
             false
         }
@@ -909,7 +1167,8 @@ class MainActivity : FlutterActivity() {
     }
 
     /** Called by the platform-view factory (main thread) to inflate the
-     *  real AppWidgetHostView into [container]. */
+     *  real AppWidgetHostView into [container]. The container is tracked
+     *  so resize notifications (PLT-07) reach the live view. */
     fun renderWidgetInto(container: FrameLayout, appWidgetId: Int?, providerId: String?) {
         val awm = AppWidgetManager.getInstance(this)
         val bound = appWidgetId?.let { awm.getAppWidgetInfo(it) }
@@ -934,6 +1193,7 @@ class MainActivity : FlutterActivity() {
                     FrameLayout.LayoutParams.MATCH_PARENT,
                 ),
             )
+            if (appWidgetId != null) hostedViews[appWidgetId] = container
         } catch (e: Exception) {
             Log.w(TAG, "widget render failed", e)
             container.addView(placeholderView("This widget could not load"))
@@ -945,6 +1205,11 @@ class MainActivity : FlutterActivity() {
         tv.text = text
         tv.setPadding(24, 24, 24, 24)
         return tv
+    }
+
+    /** A platform view went away — stop tracking its container. */
+    fun forgetHostedView(appWidgetId: Int?) {
+        if (appWidgetId != null) hostedViews.remove(appWidgetId)
     }
 
     // ------------------------------------------------------------------
@@ -984,17 +1249,29 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    /** Pulls the real notification shade (hidden StatusBarManager API —
-     *  the same call every third-party launcher uses). */
+    /** Pulls the real notification shade. Primary: the hidden
+     *  StatusBarManager call every third-party launcher uses. Fallback
+     *  (PLT-02): the accessibility service's global action when the
+     *  hidden API is blocked — same opt-in consent as the lock, honest
+     *  failure when neither route exists. */
     private fun expandNotificationsPanel(): Boolean {
-        return try {
-            val sbs = getSystemService(Context.STATUS_BAR_SERVICE) ?: return false
+        try {
+            val sbs = getSystemService(Context.STATUS_BAR_SERVICE) ?: return fallbackShade()
             Class.forName("android.app.StatusBarManager")
                 .getMethod("expandNotificationsPanel")
                 .invoke(sbs)
-            true
+            return true
         } catch (e: Exception) {
-            Log.w(TAG, "shade expand unavailable", e)
+            Log.w(TAG, "shade expand unavailable, trying accessibility fallback", e)
+            return fallbackShade()
+        }
+    }
+
+    private fun fallbackShade(): Boolean {
+        val service = ToadLockService.instance ?: return false
+        return try {
+            service.pullNotificationsPanel()
+        } catch (e: Exception) {
             false
         }
     }
@@ -1059,8 +1336,9 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    /** Dynamic + manifest shortcuts of one app. Only the default home is
-     *  allowed to query them — an empty list says "nothing to show". */
+    /** Dynamic + manifest + pinned shortcuts of one app. Only the default
+     *  home is allowed to query them — an empty list says "nothing to
+     *  show". */
     private fun appShortcuts(pkg: String): List<Map<String, Any?>> {
         if (!isDefaultHome()) return emptyList()
         return try {
@@ -1069,7 +1347,8 @@ class MainActivity : FlutterActivity() {
                 .setPackage(pkg)
                 .setQueryFlags(
                     LauncherApps.ShortcutQuery.FLAG_MATCH_MANIFEST or
-                        LauncherApps.ShortcutQuery.FLAG_MATCH_DYNAMIC,
+                        LauncherApps.ShortcutQuery.FLAG_MATCH_DYNAMIC or
+                        LauncherApps.ShortcutQuery.FLAG_MATCH_PINNED,
                 )
             val shortcuts = la.getShortcuts(query, Process.myUserHandle()) ?: emptyList()
             shortcuts.take(4).map { s ->
@@ -1144,16 +1423,17 @@ class ToadWidgetViewFactory(
 }
 
 class ToadWidgetPlatformView(
-    activity: MainActivity,
+    private val activity: MainActivity,
     params: Map<String, Any?>,
 ) : PlatformView {
 
     private val container = FrameLayout(activity)
+    private val appWidgetId = (params["appWidgetId"] as? Number)?.toInt()
 
     init {
         activity.renderWidgetInto(
             container,
-            (params["appWidgetId"] as? Number)?.toInt(),
+            appWidgetId,
             params["providerId"] as? String,
         )
     }
@@ -1161,6 +1441,7 @@ class ToadWidgetPlatformView(
     override fun getView(): View = container
 
     override fun dispose() {
+        activity.forgetHostedView(appWidgetId)
         container.removeAllViews()
     }
 }

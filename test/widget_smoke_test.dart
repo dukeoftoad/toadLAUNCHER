@@ -11,7 +11,11 @@ import 'package:toadlauncher/features/home/home_screen.dart';
 import 'package:toadlauncher/features/pond/pond_home.dart';
 
 Future<void> pumpHome(WidgetTester tester, {required bool pondPro}) async {
-  SharedPreferences.setMockInitialValues(<String, Object>{});
+  // 24 h clock pinned: the “system” format falls back to the test
+  // surface’s 12-hour default otherwise.
+  SharedPreferences.setMockInitialValues(<String, Object>{
+    'toadlauncher.settings.v1': '{"clockHourFormat": 2, "introSeen": true}',
+  });
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
@@ -45,8 +49,32 @@ void main() {
     await pumpHome(tester, pondPro: false);
     await tester.pumpAndSettle(const Duration(seconds: 1));
 
-    // Hero clock paints a HH:mm string.
+    // Hero clock paints a HH:mm string (24 h pinned so the assertion is
+    // independent of the test surface's 12/24 default).
     expect(tester.textRegExp(RegExp(r'^\d{2}:\d{2}$')), findsOneWidget);
+  });
+
+  testWidgets('hero clock renders the 12-hour face when told', (tester) async {
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      'toadlauncher.settings.v1':
+          '{"clockHourFormat": 1, "introSeen": true}',
+    });
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          clockProvider.overrideWith(
+            (ref) => Stream.value(DateTime(2026, 11, 24, 10, 42)),
+          ),
+        ],
+        child: MaterialApp(
+          home: ToadThemeScope(child: const HomeScreen()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle(const Duration(seconds: 1));
+
+    // 12-hour adds the meridiem: “10:42 am”.
+    expect(tester.textRegExp(RegExp(r'^10:42\s?(am|pm)$')), findsOneWidget);
   });
 
   testWidgets('pond home paints the resident label', (tester) async {

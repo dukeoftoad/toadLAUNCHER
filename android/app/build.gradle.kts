@@ -7,10 +7,14 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
-// toadLAUNCHER release signing — the keystore is committed (toad-release.jks) so every
-// CI build signs with the SAME key. Previously each CI runner generated a fresh random
-// debug keystore, so new APKs could never install over an installed previous build
-// (INSTALL_FAILED_UPDATE_INCOMPATIBLE / "App not installed").
+// toadLAUNCHER signing (SEC-01) — NO keystore lives in this repo.
+// Release APKs are signed in CI from GitHub Actions secrets with an
+// APK Signature Scheme v3 rotation lineage (android/toad-lineage.bin):
+// the retired key still covers v2 (Android 8 keeps updating), the new
+// 4096-bit key covers v3 for Android 9+ with rollback revoked for the
+// old key. key.properties + a keystore next to it are honored for LOCAL
+// convenience builds only (git-ignored); without them gradle falls back
+// to the debug key and CI re-signs the artifact with apksigner anyway.
 val keystoreProperties = Properties()
 val keystorePropertiesFile = rootProject.file("key.properties")
 if (keystorePropertiesFile.exists()) {
@@ -56,8 +60,9 @@ android {
 
     buildTypes {
         release {
-            // Use the committed toad-release.jks when key.properties is present;
-            // fall back to the debug key only for bare local runs without it.
+            // Local convenience signing only when key.properties exists;
+            // CI signs the built artifact itself (rotation lineage), so
+            // the debug fallback here never ships.
             signingConfig = if (keystorePropertiesFile.exists()) {
                 signingConfigs.getByName("release")
             } else {

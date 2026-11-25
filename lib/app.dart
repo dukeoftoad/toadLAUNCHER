@@ -131,6 +131,7 @@ class UpdateBannerHost extends ConsumerWidget {
       UpdateReadyToInstall() ||
       UpdateNeedsInstallPermission() ||
       UpdateChecksumFailed() ||
+      UpdateUnverified() ||
       UpdateFailed() => true,
       _ => false,
     };
@@ -163,6 +164,11 @@ class UpdateBannerHost extends ConsumerWidget {
       UpdateChecksumFailed() => (
         'Checksum failed — try again from Settings',
         () {},
+      ),
+      UpdateUnverified(:final release) => (
+        '${release.tagName} could not be verified — refused. Tap for the '
+            'release page',
+        () => ref.read(updateEngineProvider.notifier).openReleasePage(),
       ),
       UpdateFailed(:final message) => (
         message,

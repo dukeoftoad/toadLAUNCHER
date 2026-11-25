@@ -18,6 +18,51 @@ import '../theme/toad_tokens.dart';
 /// Accent options from Wallpaper & style (screen 9).
 enum AccentOption { toad, clay, steel, plum, gold, ink }
 
+/// Hero clock style — the pond wears four faces (CLOCK work, roadmap §6).
+enum HeroClockStyle { hand, analog, word, flip }
+
+extension HeroClockStyleX on HeroClockStyle {
+  String get label => switch (this) {
+    HeroClockStyle.hand => 'Hand-lettered',
+    HeroClockStyle.analog => 'Analog dial',
+    HeroClockStyle.word => 'Word clock',
+    HeroClockStyle.flip => 'Flip cards',
+  };
+}
+
+/// Hour format for the hero clock. `system` follows the platform's
+/// 12/24-hour setting (PLT-13).
+enum ClockHourFormat { system, h12, h24 }
+
+extension ClockHourFormatX on ClockHourFormat {
+  String get label => switch (this) {
+    ClockHourFormat.system => 'Follow system',
+    ClockHourFormat.h12 => '12-hour',
+    ClockHourFormat.h24 => '24-hour',
+  };
+}
+
+/// Update-check policy (SEC-04): the launcher checks at most this often,
+/// through the system download service — never its own network.
+enum UpdatePolicy { off, manual, daily, weekly }
+
+extension UpdatePolicyX on UpdatePolicy {
+  String get label => switch (this) {
+    UpdatePolicy.off => 'Never (off)',
+    UpdatePolicy.manual => 'Manual only',
+    UpdatePolicy.daily => 'Once a day',
+    UpdatePolicy.weekly => 'Once a week',
+  };
+
+  /// The minimum gap between two silent checks.
+  Duration? get minInterval => switch (this) {
+    UpdatePolicy.off => null,
+    UpdatePolicy.manual => null,
+    UpdatePolicy.daily => const Duration(days: 1),
+    UpdatePolicy.weekly => const Duration(days: 7),
+  };
+}
+
 /// Bundled sketchbook papers (screen 9 wallpaper grid).
 /// Papers ship inside the APK to honor the no-network promise.
 extension WallpaperX on int {
@@ -78,9 +123,12 @@ class LauncherSettings {
     this.drawerRecents = true,
     this.deviceMode = true,
     this.autoUpdateCheck = true,
+    this.updatePolicy = UpdatePolicy.daily,
     this.usageRecentsOptIn = false,
     this.introSeen = false,
     this.lowBatteryCalm = true,
+    this.clockStyle = HeroClockStyle.hand,
+    this.clockHourFormat = ClockHourFormat.system,
   });
 
   // Wallpaper & style.
@@ -147,6 +195,19 @@ class LauncherSettings {
   /// download service — never our own network permission).
   final bool autoUpdateCheck;
 
+  /// SEC-04: how often the silent startup check may actually run. Daily is
+  /// the honest default — a launcher process restarts constantly, and the
+  /// old "once per process" meant a network request on nearly every
+  /// process start. Manual check stays available in Settings regardless.
+  final UpdatePolicy updatePolicy;
+
+  /// Hero clock face (CLOCK): hand-lettered Caveat, a drawn analog dial, a
+  /// word clock, or flip cards.
+  final HeroClockStyle clockStyle;
+
+  /// Hero clock hour format (PLT-13): system-following by default.
+  final ClockHourFormat clockHourFormat;
+
   /// Opt-in for system usage stats in the drawer recents row. Off keeps
   /// the launcher's own recorded history; off never nags.
   final bool usageRecentsOptIn;
@@ -191,9 +252,12 @@ class LauncherSettings {
     bool? drawerRecents,
     bool? deviceMode,
     bool? autoUpdateCheck,
+    UpdatePolicy? updatePolicy,
     bool? usageRecentsOptIn,
     bool? introSeen,
     bool? lowBatteryCalm,
+    HeroClockStyle? clockStyle,
+    ClockHourFormat? clockHourFormat,
   }) {
     return LauncherSettings(
       skinMode: skinMode ?? this.skinMode,
@@ -226,9 +290,12 @@ class LauncherSettings {
       drawerRecents: drawerRecents ?? this.drawerRecents,
       deviceMode: deviceMode ?? this.deviceMode,
       autoUpdateCheck: autoUpdateCheck ?? this.autoUpdateCheck,
+      updatePolicy: updatePolicy ?? this.updatePolicy,
       usageRecentsOptIn: usageRecentsOptIn ?? this.usageRecentsOptIn,
       introSeen: introSeen ?? this.introSeen,
       lowBatteryCalm: lowBatteryCalm ?? this.lowBatteryCalm,
+      clockStyle: clockStyle ?? this.clockStyle,
+      clockHourFormat: clockHourFormat ?? this.clockHourFormat,
     );
   }
 
@@ -262,9 +329,12 @@ class LauncherSettings {
     'drawerRecents': drawerRecents,
     'deviceMode': deviceMode,
     'autoUpdateCheck': autoUpdateCheck,
+    'updatePolicy': updatePolicy.index,
     'usageRecentsOptIn': usageRecentsOptIn,
     'introSeen': introSeen,
     'lowBatteryCalm': lowBatteryCalm,
+    'clockStyle': clockStyle.index,
+    'clockHourFormat': clockHourFormat.index,
   };
 
   factory LauncherSettings.fromJson(Map<String, Object?> json) {
@@ -292,15 +362,21 @@ class LauncherSettings {
       sunriseMinute: (json['sunriseMinute'] as int?) ?? 30,
       wallpaperIndex: (json['wallpaperIndex'] as int?) ?? 0,
       clockSpanW: (json['clockSpanW'] as int?) ?? 4,
-      clockSpanH: (json['clockSpanH'] as int?) ?? 2,
+      // NEW-05: the restore default must match the constructor default
+      // (1) — a pre-existing drift made restored settings grow the hero
+      // clock to 2 rows while fresh installs kept 1.
+      clockSpanH: (json['clockSpanH'] as int?) ?? 1,
       editHintDismissed: (json['editHintDismissed'] as bool?) ?? false,
       drawerSearch: (json['drawerSearch'] as bool?) ?? true,
       drawerRecents: (json['drawerRecents'] as bool?) ?? true,
       deviceMode: (json['deviceMode'] as bool?) ?? true,
       autoUpdateCheck: (json['autoUpdateCheck'] as bool?) ?? true,
+      updatePolicy: UpdatePolicy.values[(json['updatePolicy'] as int?) ?? 2],
       usageRecentsOptIn: (json['usageRecentsOptIn'] as bool?) ?? false,
       introSeen: (json['introSeen'] as bool?) ?? false,
       lowBatteryCalm: (json['lowBatteryCalm'] as bool?) ?? true,
+      clockStyle: HeroClockStyle.values[(json['clockStyle'] as int?) ?? 0],
+      clockHourFormat: ClockHourFormat.values[(json['clockHourFormat'] as int?) ?? 0],
     );
   }
 }
@@ -383,6 +459,16 @@ class LauncherSettingsController extends Notifier<LauncherSettings> {
   void setAutoUpdateCheck(bool v) => patch(state.copyWith(autoUpdateCheck: v));
   void setUsageRecentsOptIn(bool v) =>
       patch(state.copyWith(usageRecentsOptIn: v));
+
+  /// SEC-04: how often the silent check may run (manual check always
+  /// available in Settings → Device & updates).
+  void setUpdatePolicy(UpdatePolicy p) => patch(state.copyWith(updatePolicy: p));
+
+  // CLOCK — hero clock style + hour format (roadmap §6 “Widgets & home
+  // extras”: hero clock styles + clock format; live-applied, persisted).
+  void setClockStyle(HeroClockStyle s) => patch(state.copyWith(clockStyle: s));
+  void setClockHourFormat(ClockHourFormat f) =>
+      patch(state.copyWith(clockHourFormat: f));
 
   // v0.12 — intro + battery.
   void setIntroSeen() => patch(state.copyWith(introSeen: true));

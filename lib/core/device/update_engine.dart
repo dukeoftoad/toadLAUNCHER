@@ -14,7 +14,9 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../settings/launcher_settings.dart';
 import 'device_bridge.dart';
@@ -73,6 +75,14 @@ class UpdateNeedsInstallPermission extends UpdateState {
   });
   final ReleaseInfo release;
   final int downloadId;
+}
+
+/// SEC-02: the release could not be proven ours — the detached signature
+/// was missing or invalid. The update is refused BEFORE any banner says
+/// “available”; the honest fix is the release page in the browser.
+class UpdateUnverified extends UpdateState {
+  const UpdateUnverified({required this.release});
+  final ReleaseInfo release;
 }
 
 class UpdateChecksumFailed extends UpdateState {
@@ -156,35 +166,94 @@ class UpdateEngine extends Notifier<UpdateState> {
 
   DeviceBridge get _bridge => ref.watch(deviceBridgeProvider);
 
-  /// One silent check per process on start (toadFILES v1.7.1 behavior).
+  /// SEC-04: the persisted last-check timestamp (epoch ms).
+  static const String _kLastCheckKey = 'toadlauncher.update.lastcheck';
+
+  /// True when the policy allows a silent check right now. Pure and
+  /// unit-testable: [nowMs] - [lastCheckMs] >= policy interval.
+  @visibleForTesting
+  bool silentCheckAllowed(UpdatePolicy policy, int lastCheckMs, int nowMs) {
+    final interval = policy.minInterval;
+    if (interval == null) return false; // off / manual
+    return nowMs - lastCheckMs >= interval.inMilliseconds;
+  }
+
+  /// One silent check per process on start — now throttled by the update
+  /// policy (SEC-04: daily by default, not “every process”).
   /// Respects the settings switch; swallows every failure quietly.
   Future<void> silentStartupCheck() async {
     if (_startupCheckDone) return;
     _startupCheckDone = true;
-    if (!ref.read(launcherSettingsProvider).autoUpdateCheck) return;
+    final settings = ref.read(launcherSettingsProvider);
+    if (!settings.autoUpdateCheck) return;
+
+    // The throttle: never more often than the policy allows.
+    int lastCheck = 0;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      lastCheck = prefs.getInt(_kLastCheckKey) ?? 0;
+    } catch (_) {}
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (!silentCheckAllowed(settings.updatePolicy, lastCheck, now)) return;
 
     try {
       final release = await _bridge.checkLatestRelease();
       final current = (await _bridge.versionInfo()).versionName;
       if (compareVersions(release.tagName, current) > 0) {
-        state = UpdateAvailable(release: release);
+        final verified = await _verifyRelease(release);
+        if (verified != null) state = verified;
       }
+      _stampCheck(now);
     } catch (_) {
       // Intentionally invisible — airplane mode, GitHub down, rate limit.
+      // A failed check does NOT stamp the clock: the next process may try
+      // again (honesty beats strictness for a once-a-day budget).
     }
   }
 
-  /// The explicit check from the settings page — errors surface.
+  Future<void> _stampCheck(int nowMs) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_kLastCheckKey, nowMs);
+    } catch (_) {}
+  }
+
+  /// SEC-02: verify the detached signature over
+  /// “tagName|sha256|assetName” with the embedded update key. Returns the
+  /// state to publish (UpdateAvailable / UpdateUnverified), or null when
+  /// verification is impossible here (let the caller decide).
+  @visibleForTesting
+  Future<UpdateState?> verifyRelease(ReleaseInfo release) async {
+    if (release.sha256 == null || release.sig == null) {
+      // Unsigned release — refuse with the honest handoff.
+      return UpdateUnverified(release: release);
+    }
+    final ok = await _bridge.verifyUpdateSignature(
+      release.signedMessage,
+      release.sig!,
+    );
+    if (!ok) return UpdateUnverified(release: release);
+    return UpdateAvailable(release: release);
+  }
+
+  Future<UpdateState?> _verifyRelease(ReleaseInfo release) =>
+      verifyRelease(release);
+
+  /// The explicit check from the settings page — errors surface. Manual
+  /// checks ignore the throttle (the user asked) but still verify the
+  /// signature before offering anything.
   Future<void> manualCheck() async {
     state = const UpdateChecking();
     try {
       final release = await _bridge.checkLatestRelease();
       final current = (await _bridge.versionInfo()).versionName;
       if (compareVersions(release.tagName, current) > 0) {
-        state = UpdateAvailable(release: release);
+        final verified = await _verifyRelease(release);
+        state = verified ?? UpdateUpToDate(version: current);
       } else {
         state = UpdateUpToDate(version: current);
       }
+      _stampCheck(DateTime.now().millisecondsSinceEpoch);
     } on UpdateCheckException catch (e) {
       state = UpdateFailed(e.message);
     } catch (_) {
@@ -240,8 +309,9 @@ class UpdateEngine extends Notifier<UpdateState> {
     });
   }
 
-  /// SHA-256 gate, then the system installer (or the exact settings
-  /// toggle when "Install unknown apps" is off — toadFILES behavior).
+  /// SHA-256 gate + signer-certificate gate, then the system installer
+  /// (or the exact settings toggle when "Install unknown apps" is off —
+  /// toadFILES behavior).
   Future<void> _handToInstaller({
     required ReleaseInfo release,
     required int id,
@@ -257,6 +327,11 @@ class UpdateEngine extends Notifier<UpdateState> {
         state = UpdateNeedsInstallPermission(release: release, downloadId: id);
       case InstallHandoff.checksumFailed:
         state = UpdateChecksumFailed(release: release);
+      case InstallHandoff.wrongCertificate:
+        state = const UpdateFailed(
+          'The download did not come from us — refused. Open the release '
+          'page instead if you still want it.',
+        );
       case InstallHandoff.failed:
         state = const UpdateFailed('The installer would not start — try again.');
     }

@@ -26,7 +26,11 @@ import 'package:toadlauncher/features/wallpaper_style/wallpaper_style_screen.dar
 final DateTime _fixedNow = DateTime(2026, 11, 24, 10, 42); // Tuesday
 
 Future<void> pumpHome(WidgetTester tester) async {
-  SharedPreferences.setMockInitialValues(<String, Object>{});
+  // 24 h clock pinned: the “system” format falls back to the test
+  // surface’s 12-hour default otherwise.
+  SharedPreferences.setMockInitialValues(<String, Object>{
+    'toadlauncher.settings.v1': '{"clockHourFormat": 2}',
+  });
   // The real bridge's MethodChannel, mocked to answer null: without this,
   // channel calls in the test world never complete (the test messenger
   // has no platform behind it) — providers like currentVersionProvider
@@ -492,7 +496,7 @@ void main() {
     await tester.tap(find.text('Gestures'));
     await tester.pumpAndSettle(const Duration(milliseconds: 500));
     expect(find.text('Double-tap to sleep'), findsOneWidget);
-    expect(find.textContaining('Off by default — can clash'), findsOneWidget);
+    expect(find.textContaining('Off by default — takes the shot'), findsOneWidget);
 
     final container = containerOf(tester);
     // Toggle the double-tap switch off (the first ToadSwitch row).

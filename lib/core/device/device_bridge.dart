@@ -53,6 +53,7 @@ class ReleaseInfo {
     this.apkUrl,
     this.apkSizeBytes = 0,
     this.sha256,
+    this.sig,
   });
 
   final String tagName;
@@ -69,6 +70,15 @@ class ReleaseInfo {
   /// integrity gate and says so honestly.
   final String? sha256;
 
+  /// Detached update signature (base64) over
+  /// "tagName|sha256|assetName" from the release's `.sig` asset, signed by
+  /// the update key that lives only in CI secrets (SEC-02). Null when the
+  /// release ships none — the engine refuses unsigned releases.
+  final String? sig;
+
+  /// The exact string the update signature covers.
+  String get signedMessage => '$tagName|$sha256|$apkName';
+
   factory ReleaseInfo.fromMap(Map<Object?, Object?> map) => ReleaseInfo(
     tagName: map['tagName'] as String? ?? '',
     htmlUrl: map['htmlUrl'] as String? ?? '',
@@ -77,6 +87,7 @@ class ReleaseInfo {
     apkUrl: map['apkUrl'] as String?,
     apkSizeBytes: (map['apkSizeBytes'] as num?)?.toInt() ?? 0,
     sha256: map['sha256'] as String?,
+    sig: map['sig'] as String?,
   );
 }
 
@@ -199,6 +210,9 @@ enum InstallHandoff {
 
   /// The downloaded APK failed the SHA-256 gate.
   checksumFailed,
+
+  /// The APK's signing certificate is not one of ours (SEC-02).
+  wrongCertificate,
 
   /// Installer launch failed for another reason.
   failed,
@@ -728,10 +742,104 @@ class DeviceBridge {
         'started' => InstallHandoff.started,
         'needsPermission' => InstallHandoff.needsPermission,
         'checksumFailed' => InstallHandoff.checksumFailed,
+        'wrongCertificate' => InstallHandoff.wrongCertificate,
         _ => InstallHandoff.failed,
       };
     } catch (_) {
       return InstallHandoff.failed;
+    }
+  }
+
+  // -- SEC-02 / REL-01 / PLT-03 / PLT-07 ----------------------------------
+
+  /// Verify a release's detached update signature (ECDSA P-256 over the
+  /// UTF-8 message) against the embedded update-signing public key. The
+  /// decision to trust lives in Dart; the primitive is OS-side Java.
+  Future<bool> verifyUpdateSignature(String message, String signature) async {
+    try {
+      return await _invoke('verifyUpdateSignature', {
+        'message': message,
+        'signature': signature,
+      }) == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// App-private files dir (crash log + diagnostics live here).
+  Future<String?> appFilesDir() async {
+    try {
+      return await _invoke('appFilesDir') as String?;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// The device's Android SDK level (e.g. 33 = Android 13), or -1 when
+  /// the platform is not Android. The ask flow uses it to decide whether
+  /// the Restricted Settings pre-step is needed (PLT-01).
+  Future<int> osSdkInt() async {
+    try {
+      return (await _invoke('osSdkInt') as num?)?.toInt() ?? -1;
+    } catch (_) {
+      return -1;
+    }
+  }
+
+  /// SHA-256 hex of our own signing certificate — Settings → About shows
+  /// it so anyone can cross-check the installed build against SECURITY.md.
+  Future<String?> signingCertFingerprint() async {
+    try {
+      return await _invoke('signingCertFingerprint') as String?;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// The system Home picker — the safe mode escape hatch.
+  Future<bool> openHomeSettings() async {
+    try {
+      return await _invoke('openHomeSettings') == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Share the local crash log through the system sheet (text; the user
+  /// picks the target — nothing is ever uploaded by us).
+  Future<bool> shareDiagnosticsFile(String path) async {
+    try {
+      return await _invoke('shareDiagnosticsFile', {'path': path}) == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Tell a hosted Android widget its new size in dp so responsive
+  /// providers re-render (PLT-07).
+  Future<bool> resizeHostedWidget({
+    required int appWidgetId,
+    required int widthDp,
+    required int heightDp,
+  }) async {
+    try {
+      return await _invoke('resizeHostedWidget', {
+        'appWidgetId': appWidgetId,
+        'widthDp': widthDp,
+        'heightDp': heightDp,
+      }) == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Screenshot through the accessibility global action (needs the lock
+  /// service consent, API 28+). False when unavailable — never pretend.
+  Future<bool> takeScreenshot() async {
+    try {
+      return await _invoke('takeScreenshot') == true;
+    } catch (_) {
+      return false;
     }
   }
 
@@ -791,4 +899,4 @@ final FutureProvider<String> currentVersionProvider = FutureProvider<String>(
 );
 
 /// The version this source tree ships as (pubspec twin, kept in step).
-const String kFallbackVersion = 'v1.0.0';
+const String kFallbackVersion = 'v1.1.0';

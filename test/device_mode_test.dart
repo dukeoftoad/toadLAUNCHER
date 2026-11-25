@@ -16,6 +16,8 @@ import 'package:toadlauncher/core/device/update_engine.dart';
 import 'package:toadlauncher/core/models/models.dart';
 import 'package:toadlauncher/core/repositories/app_repository.dart';
 import 'package:toadlauncher/core/repositories/device_app_repository.dart';
+import 'package:toadlauncher/core/settings/launcher_settings.dart'
+    show UpdatePolicy;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -298,6 +300,8 @@ void main() {
         tagName: 'v99.0.0',
         htmlUrl: 'https://example.com/r',
         apkUrl: 'https://example.com/apk',
+        sha256: 'abc',
+        sig: 'valid-signature',
       );
       final engine = container.read(updateEngineProvider.notifier);
       await engine.manualCheck();
@@ -360,6 +364,7 @@ void main() {
         htmlUrl: 'https://example.com/r',
         apkUrl: 'https://example.com/apk',
         sha256: 'cafe',
+        sig: 'valid-signature',
       );
       final engine = container.read(updateEngineProvider.notifier);
       await engine.manualCheck();
@@ -381,6 +386,7 @@ void main() {
         htmlUrl: 'u',
         apkUrl: 'a',
         sha256: 'cafe',
+        sig: 'valid-signature',
       );
       fake.installResult = 'checksumFailed';
       final engine = container.read(updateEngineProvider.notifier);
@@ -389,6 +395,112 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 1300));
 
       expect(container.read(updateEngineProvider), isA<UpdateChecksumFailed>());
+    });
+
+    // -- SEC-02: the signature gate --------------------------------------
+
+    test('SEC-02: unsigned release is refused (never banners)', () async {
+      fake.release = ReleaseInfo(
+        tagName: 'v99.0.0',
+        htmlUrl: 'u',
+        apkUrl: 'a',
+        sha256: 'abc',
+        // no sig — releases without the detached signature are refused
+      );
+      final engine = container.read(updateEngineProvider.notifier);
+      await engine.manualCheck();
+
+      expect(container.read(updateEngineProvider), isA<UpdateUnverified>());
+    });
+
+    test('SEC-02: invalid signature is refused', () async {
+      fake.signatureValid = false;
+      fake.release = ReleaseInfo(
+        tagName: 'v99.0.0',
+        htmlUrl: 'u',
+        apkUrl: 'a',
+        sha256: 'abc',
+        sig: 'tampered-signature',
+      );
+      final engine = container.read(updateEngineProvider.notifier);
+      await engine.manualCheck();
+
+      expect(container.read(updateEngineProvider), isA<UpdateUnverified>());
+    });
+
+    test('SEC-02: wrong-cert APK handoff is refused honestly', () async {
+      fake.release = ReleaseInfo(
+        tagName: 'v99.0.0',
+        htmlUrl: 'u',
+        apkUrl: 'a',
+        sha256: 'cafe',
+        sig: 'valid-signature',
+      );
+      fake.installResult = 'wrongCertificate';
+      final engine = container.read(updateEngineProvider.notifier);
+      await engine.manualCheck();
+      await engine.download();
+      await Future<void>.delayed(const Duration(milliseconds: 1300));
+
+      final state = container.read(updateEngineProvider);
+      expect(state, isA<UpdateFailed>());
+      expect((state as UpdateFailed).message, contains('refused'));
+    });
+
+    // -- SEC-04: the policy throttle ---------------------------------------
+
+    test('SEC-04: policy gates the silent check', () async {
+      final engine = container.read(updateEngineProvider.notifier);
+      final day = const Duration(days: 1).inMilliseconds;
+      final now = 100 * day;
+
+      // off / manual never check silently.
+      expect(engine.silentCheckAllowed(UpdatePolicy.off, 0, now), isFalse);
+      expect(engine.silentCheckAllowed(UpdatePolicy.manual, 0, now), isFalse);
+
+      // daily: too soon → no; a day passed → yes.
+      expect(
+        engine.silentCheckAllowed(UpdatePolicy.daily, now - 1000, now),
+        isFalse,
+      );
+      expect(
+        engine.silentCheckAllowed(UpdatePolicy.daily, now - day, now),
+        isTrue,
+      );
+
+      // weekly: a day is not enough.
+      expect(
+        engine.silentCheckAllowed(UpdatePolicy.weekly, now - day, now),
+        isFalse,
+      );
+      expect(
+        engine.silentCheckAllowed(
+          UpdatePolicy.weekly,
+          now - const Duration(days: 7).inMilliseconds,
+          now,
+        ),
+        isTrue,
+      );
+    });
+
+    test('SEC-04: silent check honors the daily throttle', () async {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(
+        'toadlauncher.update.lastcheck',
+        DateTime.now().millisecondsSinceEpoch - 1000, // checked moments ago
+      );
+      fake.release = ReleaseInfo(
+        tagName: 'v99.0.0',
+        htmlUrl: 'u',
+        apkUrl: 'a',
+        sha256: 'abc',
+        sig: 'valid-signature',
+      );
+      final engine = container.read(updateEngineProvider.notifier);
+      await engine.silentStartupCheck();
+      // Throttled: nothing happened at all.
+      expect(container.read(updateEngineProvider), isA<UpdateIdle>());
+      expect(fake.checkCount, 0);
     });
   });
 }
@@ -401,6 +513,8 @@ class _FakeBridge extends DeviceBridge {
   String runningVersion = '0.10.0-beta';
   UpdateCheckException? throwOnCheck;
   String installResult = 'started';
+  bool signatureValid = true;
+  int checkCount = 0;
   final List<String> launched = [];
   String? enqueuedUrl;
   String? installSha256;
@@ -440,8 +554,17 @@ class _FakeBridge extends DeviceBridge {
 
   @override
   Future<ReleaseInfo> checkLatestRelease() async {
+    checkCount++;
     if (throwOnCheck case final UpdateCheckException e) throw e;
     return release!;
+  }
+
+  @override
+  Future<bool> verifyUpdateSignature(String message, String signature) async {
+    // The fake mirrors the embedded-key contract: only the fixed test
+    // signature verifies, and only when the fake has not been told to
+    // break it (SEC-02 negative paths).
+    return signatureValid && signature == 'valid-signature';
   }
 
   @override

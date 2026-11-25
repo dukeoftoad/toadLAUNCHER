@@ -14,13 +14,14 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../core/models/models.dart';
 import '../../core/device/battery_monitor.dart' show batteryMonitorProvider;
-import '../../core/settings/launcher_settings.dart' show clockProvider;
+import '../../core/settings/launcher_settings.dart' show clockProvider, launcherSettingsProvider;
 import '../../core/theme/toad_theme.dart';
 import '../../core/theme/toad_tokens.dart';
 import '../../features/home/widgets/hero_zone.dart' show buildHeroData;
 import '../../features/settings/battery_page.dart';
 import '../../features/todo/todo_store.dart' show todoListProvider;
 import 'android_widget_view.dart';
+import 'clock_faces.dart';
 
 /// Span → clock scale. 4×1 (the default hero) renders exactly 1.0 — the
 /// stage-1 look; dragging a corner re-renders live at every size.
@@ -74,6 +75,7 @@ class ClockWidgetView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final palette = ToadTheme.of(context).palette;
+    final settings = ref.watch(launcherSettingsProvider);
     final data = buildHeroData(now, pond: false, pondNight: false);
     final scale = clockScale(w, h);
     final battery = ref.watch(batteryMonitorProvider);
@@ -95,12 +97,14 @@ class ClockWidgetView extends ConsumerWidget {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        data.time,
-                        style: ToadType.caveat(
-                          ToadMetrics.heroClockSize * scale,
-                          color: palette.ink,
-                        ),
+                      // CLOCK — the same four faces as the hero, scaled by
+                      // span ("the clock re-renders live at each size").
+                      HeroClockFace(
+                        now: now,
+                        style: settings.clockStyle,
+                        format: settings.clockHourFormat,
+                        system24: MediaQuery.alwaysUse24HourFormatOf(context),
+                        size: ToadMetrics.heroClockSize * scale,
                       ),
                       const SizedBox(height: 4),
                       Text(

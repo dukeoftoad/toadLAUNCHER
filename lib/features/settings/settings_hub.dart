@@ -204,7 +204,7 @@ class SettingsHub extends ConsumerWidget {
     final mode = settings.deviceMode && reachable
         ? 'device mode'
         : 'demo mode';
-    return "$mode · updates ${settings.autoUpdateCheck ? 'auto' : 'manual'}";
+    return '$mode · updates ${settings.updatePolicy.label.toLowerCase()}';
   }
 
   String _todoSubtitle(WidgetRef ref) {
@@ -253,6 +253,41 @@ class HomeScreenSettingsPage extends ConsumerWidget {
     return _SettingsScaffold(
       title: 'Home screen',
       children: [
+        _GroupCard(
+          palette: palette,
+          children: [
+            _ChoiceRow(
+              title: 'Hero clock style',
+              subtitle:
+                  'The pond wears four faces — hand-lettered, a drawn '
+                  'dial, wordy, or flip cards',
+              options: [
+                for (final s in HeroClockStyle.values) s.label,
+              ],
+              selectedIndex: settings.clockStyle.index,
+              accent: palette.accent,
+              accentWash: palette.accentWash,
+              ink: ink,
+              hairline: palette.hairline,
+              onSelect: (i) =>
+                  notifier.setClockStyle(HeroClockStyle.values[i]),
+            ),
+            _ChoiceRow(
+              title: 'Clock hour format',
+              subtitle: '12-hour adds am/pm; system follows your phone',
+              options: [
+                for (final f in ClockHourFormat.values) f.label,
+              ],
+              selectedIndex: settings.clockHourFormat.index,
+              accent: palette.accent,
+              accentWash: palette.accentWash,
+              ink: ink,
+              hairline: palette.hairline,
+              onSelect: (i) =>
+                  notifier.setClockHourFormat(ClockHourFormat.values[i]),
+            ),
+          ],
+        ),
         _GroupCard(
           palette: palette,
           children: [
@@ -419,7 +454,9 @@ class GesturesSettingsPage extends ConsumerWidget {
             ),
             _SwitchRow(
               title: 'Two-finger screenshot',
-              subtitle: 'Off by default — can clash with system shortcuts',
+              subtitle:
+                  'Off by default — takes the shot through the screen-lock '
+                  'service (same consent as double-tap sleep, Android 9+)',
               value: settings.twoFingerScreenshot,
               accent: palette.accent,
               ink: ink,
@@ -725,6 +762,7 @@ class AboutPage extends ConsumerWidget {
                 ref.read(launcherSettingsProvider.notifier).replayIntro();
               },
             ),
+            _CertFingerprintRow(ink: ink, palette: palette),
           ],
         ),
         const SizedBox(height: 14),
@@ -815,13 +853,28 @@ class DeviceUpdatesSettingsPage extends ConsumerWidget {
             _SwitchRow(
               title: 'Check for updates on start',
               subtitle:
-                  'Once per process, silent. Runs through the system '
-                  'download service — the launcher itself has no INTERNET '
-                  'permission (same flow as toadFILES)',
+                  'Silent, at most as often as the policy below allows. '
+                  'Runs through the system download service — the launcher '
+                  'itself has no INTERNET permission (same flow as '
+                  'toadFILES)',
               value: settings.autoUpdateCheck,
               accent: palette.accent,
               ink: ink,
               onChanged: (v) => notifier.setAutoUpdateCheck(v),
+            ),
+            _ChoiceRow(
+              title: 'How often',
+              subtitle:
+                  'Manual only = never check silently — the button below '
+                  'always works. Releases are verified with a signature '
+                  'before anything is offered',
+              options: [for (final p in UpdatePolicy.values) p.label],
+              selectedIndex: settings.updatePolicy.index,
+              accent: palette.accent,
+              accentWash: palette.accentWash,
+              ink: ink,
+              hairline: palette.hairline,
+              onSelect: (i) => notifier.setUpdatePolicy(UpdatePolicy.values[i]),
             ),
             _UpdateCheckRow(state: update, ink: ink, palette: palette),
           ],
@@ -967,6 +1020,13 @@ class _UpdateCheckRow extends StatelessWidget {
             'Try again or grab the APK from the release page',
         null,
       ),
+      UpdateUnverified(:final release) => (
+        'Release not verified',
+        '${release.tagName} could not be proven ours (missing or invalid '
+            'signature) — refused. Open the release page in the browser '
+            'if you still want it',
+        'open release page',
+      ),
       UpdateFailed(:final message) => ('Update check', message, 'check again'),
     };
 
@@ -1083,6 +1143,8 @@ class _UpdateCheckRow extends StatelessWidget {
       ctl.download();
     } else if (action == 'retry install') {
       ctl.retryInstall();
+    } else if (action == 'open release page') {
+      ctl.openReleasePage();
     }
   }
 }
@@ -1092,6 +1154,51 @@ String _fmtSize(int bytes) {
   if (bytes < 1024 * 1024) return '${(bytes / 1024).round()} kB';
   return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
 }
+
+/// SEC-01 — the installed build's signing certificate fingerprint, so
+/// anyone can cross-check the APK in hand against SECURITY.md.
+class _CertFingerprintRow extends ConsumerWidget {
+  const _CertFingerprintRow({required this.ink, required this.palette});
+
+  final Color ink;
+  final ToadPalette palette;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final fingerprint = ref.watch(_certFingerprintProvider).valueOrNull;
+    final pretty = fingerprint == null
+        ? 'unavailable here (demo surface)'
+        : _groupHex(fingerprint);
+    return _SetRow(
+      icon: '⚿',
+      title: 'Signing certificate',
+      subtitle:
+          'SHA-256 of the key that signed this build — compare it with '
+          'SECURITY.md on GitHub:\n$pretty',
+      ink: ink,
+      palette: palette,
+      onTap: () {},
+    );
+  }
+
+  static String _groupHex(String hex) {
+    final out = StringBuffer();
+    for (var i = 0; i + 4 <= hex.length; i += 4) {
+      if (i > 0 && i % 28 == 0) {
+        out.write('\n');
+      } else if (i > 0) {
+        out.write(':');
+      }
+      out.write(hex.substring(i, i + 4).toUpperCase());
+    }
+    return out.toString();
+  }
+}
+
+final FutureProvider<String?> _certFingerprintProvider =
+    FutureProvider<String?>(
+      (ref) => ref.watch(deviceBridgeProvider).signingCertFingerprint(),
+    );
 
 class _SettingsScaffold extends StatelessWidget {
   const _SettingsScaffold({required this.title, required this.children});

@@ -1,12 +1,18 @@
-/// Hero zone — "hero widget first": Caveat clock + Patrick Hand date on the
+/// Hero zone — "hero widget first": the clock + Patrick Hand date on the
 /// left, decorative two-line side note on the right. Tapping the clock opens
 /// the Clock app (device mode); the zone is swappable/removable (stage 2).
+///
+/// CLOCK (roadmap §6): the time itself renders through [HeroClockFace] —
+/// hand-lettered Caveat, a drawn analog dial, a word clock, or flip cards —
+/// with a 12/24-hour setting that follows the system by default (PLT-13).
 library;
 
 import 'package:material_ui/material_ui.dart';
 
+import '../../../core/settings/launcher_settings.dart';
 import '../../../core/theme/toad_theme.dart';
 import '../../../core/theme/toad_tokens.dart';
+import '../../../shared/widgets/clock_faces.dart';
 
 class HeroClockData {
   const HeroClockData({
@@ -16,7 +22,7 @@ class HeroClockData {
     required this.noteBottom,
   });
 
-  final String time; // "10:42"
+  final String time; // "10:42" (24 h canonical; the face formats for display)
   final String dateLine; // "Sunday · 23 November"
   final String noteTop;
   final String noteBottom;
@@ -111,11 +117,25 @@ class HeroZone extends StatelessWidget {
   const HeroZone({
     super.key,
     required this.data,
+    required this.now,
+    this.style = HeroClockStyle.hand,
+    this.hourFormat = ClockHourFormat.system,
+    this.system24 = true,
     this.batteryLine,
     this.onBatteryTap,
   });
 
   final HeroClockData data;
+
+  /// The live tick — the face needs it directly (analog hands, flip cards).
+  final DateTime now;
+
+  /// CLOCK: which face the hero wears (Settings → Home screen, live-applied).
+  final HeroClockStyle style;
+
+  /// CLOCK: 12/24-hour setting; `system24` carries the platform truth.
+  final ClockHourFormat hourFormat;
+  final bool system24;
 
   /// The pond battery pill — one honest line from the drain monitor
   /// ("battery 76% · −6.2%/h"). Null renders nothing (unknown/hidden).
@@ -137,12 +157,19 @@ class HeroZone extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // The clock itself: Caveat 700 · 78px · lh .9 · ls 1.
-                Text(
-                  data.time,
-                  style: ToadType.caveat(
-                    ToadMetrics.heroClockSize,
-                    color: palette.ink,
+                // The clock itself — one of four faces, token-sized.
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: HeroClockFace(
+                      now: now,
+                      style: style,
+                      format: hourFormat,
+                      system24: system24,
+                      size: ToadMetrics.heroClockSize,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 4),

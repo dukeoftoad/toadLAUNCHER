@@ -12,6 +12,10 @@ import android.view.accessibility.AccessibilityEvent
  * component preselected), and double-tap then locks the screen through
  * [GLOBAL_ACTION_LOCK_SCREEN]. No other capability is requested — the
  * config retrieves no window content and listens to nothing.
+ *
+ * The same consent also covers the notification-shade fallback and the
+ * screenshot action (both are plain global actions on the same service —
+ * zero extra permissions, zero extra watching).
  */
 class ToadLockService : AccessibilityService() {
 
@@ -37,6 +41,20 @@ class ToadLockService : AccessibilityService() {
     fun lockNow() {
         performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN)
     }
+
+    /** Notification-shade pull when the hidden StatusBarManager call is
+     *  unavailable (PLT-02 fallback — same service, same consent). */
+    fun pullNotificationsPanel(): Boolean =
+        performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS)
+
+    /** Quick-settings pull (offered as a gesture target one day). */
+    fun pullQuickSettings(): Boolean =
+        performGlobalAction(GLOBAL_ACTION_QUICK_SETTINGS)
+
+    /** Screenshot through the accessibility global action (API 28+).
+     *  Returns false when the platform refuses (some OEMs do). */
+    fun takeScreenshot(): Boolean =
+        performGlobalAction(GLOBAL_ACTION_TAKE_SCREENSHOT)
 
     companion object {
         /** Set while the user keeps the service enabled; null otherwise. */

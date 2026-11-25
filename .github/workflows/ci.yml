@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   verify:
-    name: Analyze · Test · Build APK
+    name: Analyze · Test · Manifest gate · Build APK
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,6 +27,7 @@ jobs:
         run: |
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "cmdline-tools;latest" > /dev/null || true
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "build-tools;37.0.0" > /dev/null || true
 
       - name: Set up Flutter 3.50.1
         uses: subosito/flutter-action@v2
@@ -44,8 +45,34 @@ jobs:
       - name: Test
         run: flutter test
 
-      - name: Build signed release APK
+      - name: Build release APK (CI re-signs it later; gradle falls back to debug here)
         run: flutter build apk --release
+
+      # PRV-01 — the no-INTERNET invariant, machine-verified on the BUILT
+      # APK (the merged manifest is ground truth; plugins can add
+      # permissions silently, the gate catches them). Only allow-listed
+      # permissions may ship.
+      - name: Permission gate (PRV-01 — no INTERNET, ever)
+        run: |
+          AAPT="$ANDROID_HOME/build-tools/37.0.0/aapt"
+          APK="build/app/outputs/flutter-apk/app-release.apk"
+          echo "--- permissions in the built APK ---"
+          "$AAPT" dump permissions "$APK" || true
+          ALLOW='android.permission.QUERY_ALL_PACKAGES|android.permission.SET_WALLPAPER|android.permission.REQUEST_DELETE_PACKAGES|android.permission.REQUEST_INSTALL_PACKAGES|android.permission.PACKAGE_USAGE_STATS'
+          BAD=$("$AAPT" dump permissions "$APK" 2>/dev/null \
+            | sed -n 's/^uses-permission: name=\(.*\)$/\1/p' \
+            | grep -Ev "^($ALLOW)$" || true)
+          if [ -n "$BAD" ]; then
+            echo "::error::APK requests permissions outside the allow-list:"
+            echo "$BAD"
+            echo "The no-INTERNET / minimal-permission invariant is CI-enforced. Extend the allow-list only with an owner decision (docs/DECISIONS.md)."
+            exit 1
+          fi
+          if "$AAPT" dump permissions "$APK" 2>/dev/null | grep -q "android.permission.INTERNET"; then
+            echo "::error::INTERNET permission found — hard fail."
+            exit 1
+          fi
+          echo "OK — only allow-listed permissions present."
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -55,8 +82,8 @@ jobs:
           if-no-files-found: error
 
   release:
-    name: Signed release
-    # Runs when a v* tag is pushed (git tag v1.0.0 && git push origin v1.0.0).
+    name: Signed release (key rotation + update signature)
+    # Runs when a v* tag is pushed (git tag v1.1.0 && git push origin v1.1.0).
     if: startsWith(github.ref, 'refs/tags/v')
     needs: verify
     runs-on: ubuntu-latest
@@ -76,22 +103,108 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Ensure Android build-tools (apksigner)
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "cmdline-tools;latest" > /dev/null || true
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "build-tools;37.0.0" > /dev/null || true
+
       - name: Pub get
         run: flutter pub get
 
-      - name: Build signed universal APK
+      - name: Build unsigned release APK
         run: flutter build apk --release
 
-      - name: Stage release files
+      - name: Restore signing keys from secrets (SEC-01)
+        env:
+          KEYSTORE_V2_B64: ${{ secrets.TOAD_KEYSTORE_V2_B64 }}
+          KEYSTORE_V2_PASSWORD: ${{ secrets.TOAD_KEYSTORE_V2_PASSWORD }}
+          OLD_KEYSTORE_B64: ${{ secrets.TOAD_OLD_KEYSTORE_B64 }}
+          OLD_KEYSTORE_PASSWORD: ${{ secrets.TOAD_OLD_KEYSTORE_PASSWORD }}
+          UPDATE_KEY_B64: ${{ secrets.TOAD_UPDATE_SIGNING_KEY_B64 }}
+        run: |
+          echo "$KEYSTORE_V2_B64" | base64 -d > /tmp/toad-release-v2.jks
+          echo "$OLD_KEYSTORE_B64" | base64 -d > /tmp/toad-release-old.jks
+          echo "$UPDATE_KEY_B64" | base64 -d > /tmp/toad-update-signing.pem
+          ls -la /tmp/*.jks /tmp/*.pem
+
+      # SEC-01 — the APK signature scheme v3 rotation:
+      #   v2  = the retired (lineage-root) key  → Android 8 keeps updating
+      #   v3  = the new 4096-bit key + lineage  → Android 9+ (rollback
+      #         capability REVOKED for the old key: it can never retake
+      #         the app, even though it leaked into git history)
+      - name: Sign with rotation lineage (old key v2 · new key v3)
+        run: |
+          APKSIGNER="$ANDROID_HOME/build-tools/37.0.0/apksigner"
+          APK="build/app/outputs/flutter-apk/app-release.apk"
+          "$APKSIGNER" sign \
+            --ks /tmp/toad-release-old.jks --ks-key-alias toadrelease \
+              --ks-pass "pass:${{ secrets.TOAD_OLD_KEYSTORE_PASSWORD }}" \
+            --next-signer \
+            --ks /tmp/toad-release-v2.jks --ks-key-alias toadrelease \
+              --ks-pass "pass:${{ secrets.TOAD_KEYSTORE_V2_PASSWORD }}" \
+            --lineage android/toad-lineage.bin \
+            --rotation-min-sdk-version 28 \
+            --min-sdk-version 26 --v1-signing-enabled false \
+            "$APK"
+
+      - name: Verify the signature (scheme + certificates)
+        run: |
+          APKSIGNER="$ANDROID_HOME/build-tools/37.0.0/apksigner"
+          APK="build/app/outputs/flutter-apk/app-release.apk"
+          "$APKSIGNER" verify --verbose "$APK"
+          CERTS=$("$APKSIGNER" verify --print-certs "$APK")
+          echo "$CERTS"
+          # The v3 signer must be the CURRENT key (see SECURITY.md).
+          echo "$CERTS" | grep -q \
+            "5fdadde01fdf2517a70aac86f315887cb79b74a0d478796f0d4bf40ccb7ac6b6" \
+            || { echo "::error::v3 signer is not the current release key"; exit 1; }
+          # The lineage must be embedded and list the retired key without
+          # rollback capability.
+          "$APKSIGNER" lineage --in "$APK" --print-certs | tee /tmp/lineage.txt
+          grep -q "Has rollback capability      : false" /tmp/lineage.txt \
+            || { echo "::error::lineage rollback capability must stay false"; exit 1; }
+
+      - name: Permission gate (PRV-01 — releases are gated too)
+        run: |
+          AAPT="$ANDROID_HOME/build-tools/37.0.0/aapt"
+          APK="build/app/outputs/flutter-apk/app-release.apk"
+          ALLOW='android.permission.QUERY_ALL_PACKAGES|android.permission.SET_WALLPAPER|android.permission.REQUEST_DELETE_PACKAGES|android.permission.REQUEST_INSTALL_PACKAGES|android.permission.PACKAGE_USAGE_STATS'
+          BAD=$("$AAPT" dump permissions "$APK" 2>/dev/null \
+            | sed -n 's/^uses-permission: name=\(.*\)$/\1/p' \
+            | grep -Ev "^($ALLOW)$" || true)
+          if [ -n "$BAD" ]; then
+            echo "::error::APK requests permissions outside the allow-list:"
+            echo "$BAD"
+            exit 1
+          fi
+
+      - name: Stage release files (APK · sha256 · detached signature)
         id: stage
         run: |
-          VER=$(grep -m1 '^version:' pubspec.yaml | awk '{print $2}' | cut -d '+' -f1)
+          APKSIGNER="$ANDROID_HOME/build-tools/37.0.0/apksigner"
+          APK="build/app/outputs/flutter-apk/app-release.apk"
+          VER=$(grep -m1 '^version:' pubspec.yaml | awk '{print $2}' | cut -d '+' -f 1)
           mkdir -p dist
-          cp build/app/outputs/flutter-apk/app-release.apk \
-             "dist/toadlauncher-v${VER}-universal-install.apk"
-          sha256sum "dist/toadlauncher-v${VER}-universal-install.apk" \
-             > "dist/toadlauncher-v${VER}-universal-install.apk.sha256"
+          ASSET="toadlauncher-v${VER}-universal-install.apk"
+          cp "$APK" "dist/$ASSET"
+          ( cd dist && sha256sum "$ASSET" > "$ASSET.sha256" )
+          SHA=$(awk '{print $1}' "dist/$ASSET.sha256")
+
+          # SEC-02 — the detached update signature over
+          # "tagName|sha256|assetName" with the ECDSA update key (CI-only
+          # private half; the app embeds the public half and REFUSES
+          # unsigned releases).
+          printf 'v%s|%s|%s' "$VER" "$SHA" "$ASSET" > /tmp/update-msg.txt
+          openssl dgst -sha256 -sign /tmp/toad-update-signing.pem \
+            -out "dist/$ASSET.sig" /tmp/update-msg.txt
+          # Round-trip sanity: verify with the embedded public key.
+          openssl ec -in /tmp/toad-update-signing.pem -pubout -out /tmp/toad-update-public.pem
+          openssl dgst -sha256 -verify /tmp/toad-update-public.pem \
+            -signature "dist/$ASSET.sig" /tmp/update-msg.txt
+
           echo "version=${VER}" >> "$GITHUB_OUTPUT"
+          echo "asset=${ASSET}" >> "$GITHUB_OUTPUT"
           ls -la dist
 
       - name: GitHub Release
@@ -103,12 +216,21 @@ jobs:
 
             **Install**
             1. Download `toadlauncher-v*-universal-install.apk` (universal: works on every phone architecture).
-            2. Updating from v0.9.0-beta or newer installs right over it — same committed release keystore. Only pre-v0.9 CI builds (random debug keys) need an uninstall first.
+            2. Updating from v1.0.0 or older installs right over it — the signing key rotated with an APK
+               Signature Scheme v3 lineage, so Android 9+ accepts the new key in place (Android 8.x reinstalls once).
             3. Allow "Install unknown apps" for your browser/file manager when asked.
             4. Requires Android 8.0+ (minSdk 26). Open the APK, install, then set toadLAUNCHER as your Home app.
 
-            Updates arrive in-app: Settings → Device & updates, or the banner on your home screen.
-            Offline-first · no ads · no analytics · **no INTERNET permission**.
+            **Verify (optional)** — the release ships three files:
+            - the APK,
+            - `...apk.sha256` (checksum),
+            - `...apk.sig` — a detached signature over `v<version>|<sha256>|<asset name>`, made with the
+              update-signing key whose public half is embedded in the app and printed in SECURITY.md.
+
+            Updates arrive in-app: Settings → Device & updates. Every release is signature-verified on
+            device before anything is offered or installed.
+            Offline-first · no ads · no analytics · **no INTERNET permission** (CI-enforced).
           files: |
             dist/toadlauncher-v${{ steps.stage.outputs.version }}-universal-install.apk
             dist/toadlauncher-v${{ steps.stage.outputs.version }}-universal-install.apk.sha256
+            dist/toadlauncher-v${{ steps.stage.outputs.version }}-universal-install.apk.sig

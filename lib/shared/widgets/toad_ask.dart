@@ -209,3 +209,22 @@ ToadAsk askDefaultHome(Future<void> Function() open) => ToadAsk(
   toggleLabel: 'open the system dialog',
   openToggle: open,
 );
+
+/// PLT-01 — the Restricted Settings pre-step (Android 13+ sideloads).
+/// The toggle deep-links would land on GREYED-OUT switches; this ask
+/// walks the one-time unlock first, then the caller continues to the
+/// real toggle.
+ToadAsk askRestrictedSettings(Future<void> Function() openAppInfo) => ToadAsk(
+  icon: '🔒',
+  title: 'One-time unlock first',
+  reason:
+      'Because toadLAUNCHER was installed outside an app store, '
+      'Android 13+ keeps some switches greyed out ("Restricted '
+      'setting") until you allow them once. It takes three taps:\n'
+      '\n'
+      '1. open App info for toadLAUNCHER\n'
+      '2. tap the ⋮ menu (top right) → "Allow restricted settings"\n'
+      '3. come back — the switch will flip like normal',
+  toggleLabel: 'open App info',
+  openToggle: openAppInfo,
+);

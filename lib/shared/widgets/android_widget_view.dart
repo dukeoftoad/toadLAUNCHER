@@ -15,6 +15,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../../core/device/device_bridge.dart';
 import '../../core/models/models.dart';
 import '../../core/theme/toad_theme.dart';
 import '../../core/theme/toad_tokens.dart';
@@ -34,42 +35,75 @@ class AndroidHostedWidgetView extends StatefulWidget {
 }
 
 class _AndroidHostedWidgetViewState extends State<AndroidHostedWidgetView> {
+  Size? _lastReportedSize;
+
   @override
   Widget build(BuildContext context) {
     final widget = this.widget.widget;
 
-    return SizedBox(
-      height: widgetZoneHeight(widget.h),
-      width: double.infinity,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(ToadRadii.card),
-          child: PlatformViewLink(
-            viewType: kToadWidgetViewType,
-            surfaceFactory: (context, controller) => AndroidViewSurface(
-              controller: controller as ExpensiveAndroidViewController,
-              gestureRecognizers: const <Factory<OneSequenceGestureRecognizer>>{},
-              hitTestBehavior: PlatformViewHitTestBehavior.opaque,
-            ),
-            onCreatePlatformView: (params) {
-              return PlatformViewsService.initExpensiveAndroidView(
-                id: params.id,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // PLT-07 — tell the real AppWidgetHostView its new size (dp) so
+        // responsive widgets re-render. Reported once per change, after
+        // layout: options updates are not free.
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _maybeReportSize(constraints),
+        );
+        return SizedBox(
+          height: widgetZoneHeight(widget.h),
+          width: double.infinity,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(ToadRadii.card),
+              child: PlatformViewLink(
                 viewType: kToadWidgetViewType,
-                layoutDirection: Directionality.of(context),
-                creationParams: <String, Object?>{
-                  'appWidgetId': widget.appWidgetId,
-                  'providerId': widget.providerId,
+                surfaceFactory: (context, controller) => AndroidViewSurface(
+                  controller: controller as ExpensiveAndroidViewController,
+                  gestureRecognizers: const <Factory<OneSequenceGestureRecognizer>>{},
+                  hitTestBehavior: PlatformViewHitTestBehavior.opaque,
+                ),
+                onCreatePlatformView: (params) {
+                  return PlatformViewsService.initExpensiveAndroidView(
+                    id: params.id,
+                    viewType: kToadWidgetViewType,
+                    layoutDirection: Directionality.of(context),
+                    creationParams: <String, Object?>{
+                      'appWidgetId': widget.appWidgetId,
+                      'providerId': widget.providerId,
+                    },
+                    creationParamsCodec: const StandardMessageCodec(),
+                    onFocus: () => params.onFocusChanged(true),
+                  )
+                    ..addOnPlatformViewCreatedListener(params.onPlatformViewCreated)
+                    ..create();
                 },
-                creationParamsCodec: const StandardMessageCodec(),
-                onFocus: () => params.onFocusChanged(true),
-              )
-                ..addOnPlatformViewCreatedListener(params.onPlatformViewCreated)
-                ..create();
-            },
+              ),
+            ),
           ),
-        ),
-      ),
+        );
+      },
+    );
+  }
+
+  void _maybeReportSize(BoxConstraints constraints) {
+    final id = widget.widget.appWidgetId;
+    if (id == null || !constraints.hasBoundedWidth || !constraints.hasBoundedHeight) {
+      return;
+    }
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    final size = Size(constraints.maxWidth / dpr, constraints.maxHeight / dpr);
+    final last = _lastReportedSize;
+    if (last != null &&
+        (last.width - size.width).abs() < 4 &&
+        (last.height - size.height).abs() < 4) {
+      return; // sub-4dp jitter is noise
+    }
+    _lastReportedSize = size;
+    DeviceBridge().resizeHostedWidget(
+      appWidgetId: id,
+      widthDp: size.width.round(),
+      heightDp: size.height.round(),
     );
   }
 }

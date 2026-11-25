@@ -201,6 +201,12 @@ class _PondHomeState extends ConsumerState<PondHome> {
                         children: [
                           HeroZone(
                             data: hero,
+                            now: now,
+                            style: settings.clockStyle,
+                            hourFormat: settings.clockHourFormat,
+                            system24: MediaQuery.alwaysUse24HourFormatOf(
+                              context,
+                            ),
                             batteryLine: battery.level >= 0
                                 ? battery.heroLine
                                 : null,
