@@ -209,8 +209,9 @@ class SettingsHub extends ConsumerWidget {
 
   String _todoSubtitle(WidgetRef ref) {
     final tasks = ref.watch(todoListProvider);
-    if (tasks.isEmpty) return 'your launcher-native list — notes under '
-        'every fly';
+    if (tasks.isEmpty) {
+      return 'your launcher-native list — notes under every fly';
+    }
     final open = tasks.where((t) => !t.done).length;
     final notes = tasks.fold<int>(0, (n, t) => n + t.comments.length);
     return '$open open · $notes notes · all local';

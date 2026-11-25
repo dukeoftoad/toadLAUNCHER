@@ -123,18 +123,16 @@ class BatteryPage extends ConsumerWidget {
                             Padding(
                               padding: const EdgeInsets.only(bottom: 10),
                               child: Text(
-                                switch ((
-                                  charging: battery.charging,
-                                  full: battery.full,
-                                  unknown: battery.level < 0,
-                                )) {
-                                  (unknown: true) => 'waiting for the OS…',
-                                  (full: true) => 'the frog is full',
-                                  (charging: true) => 'charging',
-                                  _ => lowBattery
-                                      ? 'low — the pond guards itself'
-                                      : 'unplugged',
-                                },
+                                battery.level < 0
+                                    ? 'waiting for the OS…'
+                                    : battery.full
+                                        ? 'the frog is full'
+                                        : battery.charging
+                                            ? 'charging'
+                                            : lowBattery
+                                                ? 'low — the pond guards '
+                                                    'itself'
+                                                : 'unplugged',
                                 style: ToadType.hand(15, color: softInk),
                               ),
                             ),

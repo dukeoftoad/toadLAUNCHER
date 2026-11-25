@@ -89,7 +89,7 @@ class BatteryData {
     full: full ?? this.full,
     demo: demo ?? this.demo,
     samples: samples ?? this.samples,
-  });
+  );
 
   /// %/hour lost while unplugged, averaged over the trailing window.
   /// Null when there is not enough unplugged history yet (< 12 min) —

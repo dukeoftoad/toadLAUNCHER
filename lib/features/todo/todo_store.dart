@@ -82,7 +82,7 @@ class ToadTask {
     comments: comments ?? this.comments,
   );
 
-  Map<String, Object> toJson() => {
+  Map<String, Object?> toJson() => {
     'id': id,
     'title': title,
     'createdAt': createdAt.millisecondsSinceEpoch,

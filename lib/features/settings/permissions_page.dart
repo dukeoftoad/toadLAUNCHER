@@ -79,7 +79,9 @@ class _PermissionsPageState extends ConsumerState<PermissionsPage> {
   /// Open a toggle, wait for the user to flip it there, then re-check.
   /// The user coming back to the launcher is the signal Android gave us;
   /// a short settle delay keeps ROMs that write the setting late honest.
-  Future<void> _askAndGrant(ToadAsk Function(Future<void>) make) async {
+  Future<void> _askAndGrant(
+    ToadAsk Function(Future<void> Function()) make,
+  ) async {
     final proceeded = await showToadAsk(
       context,
       make(() async {
@@ -110,7 +112,9 @@ class _PermissionsPageState extends ConsumerState<PermissionsPage> {
   }
 
   /// The exact toggle per ask — the deep-link Android needs.
-  Future<void> _openToggleFor(ToadAsk Function(Future<void>) make) async {
+  Future<void> _openToggleFor(
+    ToadAsk Function(Future<void> Function()) make,
+  ) async {
     final bridge = ref.read(deviceBridgeProvider);
     if (make == askDefaultHome) {
       await bridge.requestDefaultHome();
@@ -124,7 +128,7 @@ class _PermissionsPageState extends ConsumerState<PermissionsPage> {
   }
 
   /// Map the ask factory back to its live status for the post-grant toast.
-  bool? _statusOf(ToadAsk Function(Future<void>) make) {
+  bool? _statusOf(ToadAsk Function(Future<void> Function()) make) {
     // The five rows are identified by their factories; simple equality
     // keeps the mapping honest without extra machinery.
     if (make == askDefaultHome) return _isHome;
@@ -259,7 +263,6 @@ class _PermissionsPageState extends ConsumerState<PermissionsPage> {
                           'shortcuts and shade are unlocked',
                       statusOff: 'Another app is Home — real widgets and '
                           'app shortcuts stay locked',
-                      ask: askDefaultHome,
                       onGrant: () => _askAndGrant(askDefaultHome),
                     ),
                     _PermCard(
@@ -272,7 +275,6 @@ class _PermissionsPageState extends ConsumerState<PermissionsPage> {
                           'names only, never message text',
                       statusOff: 'Not granted — dots stay quiet until you '
                           'flip the exact toggle',
-                      ask: askNotificationAccess,
                       onGrant: () => _askAndGrant(askNotificationAccess),
                     ),
                     _PermCard(
@@ -285,7 +287,6 @@ class _PermissionsPageState extends ConsumerState<PermissionsPage> {
                           'screen (Android 9+)',
                       statusOff: 'Not granted — double-tap says so honestly '
                           'until you flip the accessibility entry',
-                      ask: askLockService,
                       onGrant: () => _askAndGrant(askLockService),
                     ),
                     _PermCard(
@@ -298,7 +299,6 @@ class _PermissionsPageState extends ConsumerState<PermissionsPage> {
                           'real usage (opt-in)',
                       statusOff: 'Not granted — recents use the launcher\'s '
                           'own launch history instead',
-                      ask: askUsageAccess,
                       onGrant: () => _askAndGrant(askUsageAccess),
                     ),
                     const SizedBox(height: 4),
@@ -378,7 +378,6 @@ class _PermCard extends StatelessWidget {
     required this.status,
     required this.statusOn,
     required this.statusOff,
-    required this.ask,
     required this.onGrant,
   });
 
@@ -389,7 +388,6 @@ class _PermCard extends StatelessWidget {
   final bool status;
   final String statusOn;
   final String statusOff;
-  final ToadAsk Function(Future<void> Function()) ask;
   final VoidCallback onGrant;
 
   @override
