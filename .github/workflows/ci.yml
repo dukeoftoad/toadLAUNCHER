@@ -58,9 +58,10 @@ jobs:
           APK="build/app/outputs/flutter-apk/app-release.apk"
           echo "--- permissions in the built APK ---"
           "$AAPT" dump permissions "$APK" || true
-          ALLOW='android.permission.QUERY_ALL_PACKAGES|android.permission.SET_WALLPAPER|android.permission.REQUEST_DELETE_PACKAGES|android.permission.REQUEST_INSTALL_PACKAGES|android.permission.PACKAGE_USAGE_STATS'
+          # aapt quotes the names: name='android.permission.X'
+          ALLOW='android.permission.QUERY_ALL_PACKAGES|android.permission.SET_WALLPAPER|android.permission.REQUEST_DELETE_PACKAGES|android.permission.REQUEST_INSTALL_PACKAGES|android.permission.PACKAGE_USAGE_STATS|family.toad.launcher.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION'
           BAD=$("$AAPT" dump permissions "$APK" 2>/dev/null \
-            | sed -n 's/^uses-permission: name=\(.*\)$/\1/p' \
+            | sed -n "s/^uses-permission: name=['\"]\{0,1\}\([^'\"]*\)['\"]\{0,1\}$/\1/p" \
             | grep -Ev "^($ALLOW)$" || true)
           if [ -n "$BAD" ]; then
             echo "::error::APK requests permissions outside the allow-list:"
@@ -169,9 +170,9 @@ jobs:
         run: |
           AAPT="$ANDROID_HOME/build-tools/37.0.0/aapt"
           APK="build/app/outputs/flutter-apk/app-release.apk"
-          ALLOW='android.permission.QUERY_ALL_PACKAGES|android.permission.SET_WALLPAPER|android.permission.REQUEST_DELETE_PACKAGES|android.permission.REQUEST_INSTALL_PACKAGES|android.permission.PACKAGE_USAGE_STATS'
+          ALLOW='android.permission.QUERY_ALL_PACKAGES|android.permission.SET_WALLPAPER|android.permission.REQUEST_DELETE_PACKAGES|android.permission.REQUEST_INSTALL_PACKAGES|android.permission.PACKAGE_USAGE_STATS|family.toad.launcher.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION'
           BAD=$("$AAPT" dump permissions "$APK" 2>/dev/null \
-            | sed -n 's/^uses-permission: name=\(.*\)$/\1/p' \
+            | sed -n "s/^uses-permission: name=['\"]\{0,1\}\([^'\"]*\)['\"]\{0,1\}$/\1/p" \
             | grep -Ev "^($ALLOW)$" || true)
           if [ -n "$BAD" ]; then
             echo "::error::APK requests permissions outside the allow-list:"
