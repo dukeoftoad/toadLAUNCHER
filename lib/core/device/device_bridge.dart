@@ -791,4 +791,4 @@ final FutureProvider<String> currentVersionProvider = FutureProvider<String>(
 );
 
 /// The version this source tree ships as (pubspec twin, kept in step).
-const String kFallbackVersion = 'v0.12.0-beta';
+const String kFallbackVersion = 'v0.12.1-beta';

@@ -85,37 +85,65 @@ class UpdateFailed extends UpdateState {
   final String message;
 }
 
-/// Semver-ish compare, tolerant of the pubspec flavor: "v0.10.0-beta",
-/// "0.10.0", "0.10.0-beta+30". Numeric dot-parts first; a suffix makes a
-/// version LOWER than the same version without one (release > beta).
+/// Component-wise version compare — a faithful port of toadFILES'
+/// VersionCompare (the shape GitHub tags actually use): optional leading
+/// "v", dot/dash parts compare numerically ("1.10.0" > "1.9.0"), a
+/// missing pre-release suffix means the stable release ("1.7.0-beta" <
+/// "1.7.0"), and build metadata ("+41") rides inside the suffix. A tag
+/// with no numeric parts at all parses as 0 — a malformed tag can never
+/// push an update. Pure Dart, no platform calls — unit-testable.
 int compareVersions(String a, String b) {
-  (List<int>, String?) parseV(String v) {
-    var s = v.trim().toLowerCase().replaceFirst(RegExp(r'^v'), '');
-    final plus = s.indexOf('+');
-    if (plus >= 0) s = s.substring(0, plus);
-    final dash = s.indexOf('-');
-    final core = dash >= 0 ? s.substring(0, dash) : s;
-    final suffix = dash >= 0 ? s.substring(dash + 1) : null;
-    final parts = [
-      for (final p in core.split('.')) int.tryParse(p) ?? 0,
-    ];
-    return (parts, suffix);
-  }
-
-  final (aParts, aSuffix) = parseV(a);
-  final (bParts, bSuffix) = parseV(b);
-
-  final len = aParts.length > bParts.length ? aParts.length : bParts.length;
+  final left = _parseVersion(a);
+  final right = _parseVersion(b);
+  if (left == null || right == null) return 0;
+  final len = left.length > right.length ? left.length : right.length;
   for (var i = 0; i < len; i++) {
-    final ai = i < aParts.length ? aParts[i] : 0;
-    final bi = i < bParts.length ? bParts[i] : 0;
-    if (ai != bi) return ai.compareTo(bi);
+    final l = i < left.length ? left[i] : _missingComponent;
+    final r = i < right.length ? right[i] : _missingComponent;
+    if (l.number != r.number) return l.number.compareTo(r.number);
+    final ls = l.suffix;
+    final rs = r.suffix;
+    if (ls == rs) continue;
+    if (ls == null) return 1; // stable outranks its own pre-releases
+    if (rs == null) return -1;
+    final c = ls.compareTo(rs);
+    if (c != 0) return c;
   }
-  // Equal cores: no-suffix beats any suffix; suffix ties go lexicographic.
-  if (aSuffix == null && bSuffix == null) return 0;
-  if (aSuffix == null) return 1;
-  if (bSuffix == null) return -1;
-  return aSuffix.compareTo(bSuffix);
+  return 0;
+}
+
+class _VersionComponent {
+  const _VersionComponent(this.number, this.suffix);
+
+  final int number;
+  final String? suffix;
+}
+
+const _VersionComponent _missingComponent = _VersionComponent(0, null);
+
+List<_VersionComponent>? _parseVersion(String version) {
+  var cleaned = version.trim().toLowerCase();
+  while (cleaned.startsWith('v')) {
+    cleaned = cleaned.substring(1);
+  }
+  // Semver rule: build metadata ("+41") never changes precedence —
+  // "0.12.0-beta+41" == "0.12.0-beta" (pinned by device_mode_test).
+  final plus = cleaned.indexOf('+');
+  if (plus >= 0) cleaned = cleaned.substring(0, plus);
+  if (cleaned.isEmpty) return null;
+  final out = <_VersionComponent>[];
+  for (final part in cleaned.split(RegExp(r'[.-]'))) {
+    final m = RegExp(r'^(\d*)(.*)$').firstMatch(part);
+    final digits = m?.group(1) ?? '';
+    final rest = m?.group(2) ?? '';
+    out.add(
+      _VersionComponent(
+        digits.isEmpty ? 0 : (int.tryParse(digits) ?? 0),
+        rest.isEmpty ? null : rest,
+      ),
+    );
+  }
+  return out;
 }
 
 /// Riverpod state holder for the update flow.

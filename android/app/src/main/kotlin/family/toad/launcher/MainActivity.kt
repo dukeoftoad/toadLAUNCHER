@@ -15,7 +15,6 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.LauncherApps
 import android.content.pm.PackageManager
-import android.content.pm.PackageInstaller
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
@@ -60,6 +59,12 @@ import java.util.concurrent.Executors
 class MainActivity : FlutterActivity() {
 
     private val executor = Executors.newSingleThreadExecutor()
+
+    /** Update ops own their thread: a release check can block for tens of
+     *  seconds, and it must never delay app indexing or wallpaper work on
+     *  [executor] — the v0.12 shared-thread design froze the whole channel
+     *  behind a 25 s update check. */
+    private val updateExecutor = Executors.newSingleThreadExecutor()
     private var channel: MethodChannel? = null
     private var pendingWallpaperResult: MethodChannel.Result? = null
     private var widgetHost: AppWidgetHost? = null
@@ -172,20 +177,20 @@ class MainActivity : FlutterActivity() {
                 "batteryStatus" -> result.success(
                     batteryStatus()
                 )
-                "checkLatestRelease" -> onExecutor(result) {
+                "checkLatestRelease" -> onUpdateExecutor(result) {
                     checkLatestRelease(call.argument<String>("repo") ?: "")
                 }
-                "enqueueApkDownload" -> onExecutor(result) {
+                "enqueueApkDownload" -> onUpdateExecutor(result) {
                     enqueueApk(
                         call.argument<String>("url") ?: "",
                         call.argument<String>("fileName") ?: "toadlauncher-update.apk",
                         call.argument<String>("title") ?: "toadLAUNCHER update",
                     )
                 }
-                "downloadProgress" -> result.success(
+                "downloadProgress" -> onUpdateExecutor(result) {
                     downloadProgress((call.arguments as Map<*, *>)["id"] as Number)
-                )
-                "installDownloadedApk" -> onExecutor(result) {
+                }
+                "installDownloadedApk" -> onUpdateExecutor(result) {
                     installDownloadedApk(
                         (call.arguments as Map<*, *>)["id"] as Number,
                         (call.arguments as Map<*, *>)["expectedSha256"] as String?,
@@ -256,6 +261,7 @@ class MainActivity : FlutterActivity() {
             Log.w(TAG, "battery events receiver not registered", e)
         }
         executor.shutdown()
+        updateExecutor.shutdown()
         super.onDestroy()
     }
 
@@ -281,6 +287,23 @@ class MainActivity : FlutterActivity() {
         crossinline body: () -> Any?,
     ) {
         executor.execute {
+            try {
+                val value = body()
+                runOnUiThread { result.success(value) }
+            } catch (e: IllegalStateException) {
+                runOnUiThread { result.error(e.message ?: "error", e.message, null) }
+            } catch (e: Exception) {
+                runOnUiThread { result.error("error", e.message, null) }
+            }
+        }
+    }
+
+    /** The update twin of [onExecutor] — same error contract, own thread. */
+    private inline fun onUpdateExecutor(
+        result: MethodChannel.Result,
+        crossinline body: () -> Any?,
+    ) {
+        updateExecutor.execute {
             try {
                 val value = body()
                 runOnUiThread { result.success(value) }
@@ -517,7 +540,9 @@ class MainActivity : FlutterActivity() {
 
     // ------------------------------------------------------------------
     // updates — through the system DownloadManager (network in the
-    // system's process; this app stays INTERNET-free)
+    // system's process; this app stays INTERNET-free). Ported to the
+    // toadFILES flow that actually works on-device: app-private
+    // destination + DownloadManager content URI + plain install intent.
 
     private fun newDownload(
         url: String,
@@ -531,11 +556,14 @@ class MainActivity : FlutterActivity() {
             .setDescription("toadLAUNCHER")
             .setMimeType(mimeType)
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
+            // The user tapped a button (or opted into the auto-check):
+            // honor metered networks too — Wi-Fi-only queuing is how
+            // "stuck at 0%" bugs are born.
+            .setAllowedOverMetered(true)
         if (toPublicDownloads) {
             builder.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
         } else {
-            val dir = File(getExternalFilesDir(null), "updates").apply { mkdirs() }
-            builder.setDestinationUri(Uri.fromFile(File(dir, fileName)))
+            builder.setDestinationUri(Uri.fromFile(File(appPrivateUpdatesDir(), fileName)))
         }
         val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
         return try {
@@ -544,6 +572,10 @@ class MainActivity : FlutterActivity() {
             throw IllegalStateException("downloadUnavailable")
         }
     }
+
+    /** App-private updates dir — never public Downloads. */
+    private fun appPrivateUpdatesDir(): File =
+        File(getExternalFilesDir(null), "updates").apply { mkdirs() }
 
     private fun checkLatestRelease(repo: String): Map<String, Any?> {
         val jsonUrl = "https://api.github.com/repos/$repo/releases/latest"
@@ -562,17 +594,37 @@ class MainActivity : FlutterActivity() {
         var apkName: String? = null
         var apkUrl: String? = null
         var apkSize = 0L
+        var anyApkName: String? = null
+        var anyApkUrl: String? = null
+        var anyApkSize = 0L
         var shaAssetUrl: String? = null
         for (i in 0 until assets.length()) {
             val a = assets.getJSONObject(i)
             val name = a.optString("name")
-            if (name.endsWith(".apk") && name.contains("toadlauncher")) {
+            if (name.endsWith(".apk.sha256")) {
+                shaAssetUrl = a.optString("browser_download_url")
+                continue
+            }
+            if (!name.endsWith(".apk", ignoreCase = true)) continue
+            if (anyApkUrl == null) {
+                anyApkName = name
+                anyApkUrl = a.optString("browser_download_url")
+                anyApkSize = a.optLong("size")
+            }
+            // Prefer the asset that names the launcher, but never depend on
+            // exact naming — a renamed asset must not break the update
+            // (the old contains("toadlauncher") filter threw noApkAsset
+            // whenever the release asset carried a different name).
+            if (apkUrl == null && name.contains("launcher", ignoreCase = true)) {
                 apkName = name
                 apkUrl = a.optString("browser_download_url")
                 apkSize = a.optLong("size")
-            } else if (name.endsWith(".apk.sha256")) {
-                shaAssetUrl = a.optString("browser_download_url")
             }
+        }
+        if (apkUrl.isNullOrEmpty()) {
+            apkName = anyApkName
+            apkUrl = anyApkUrl
+            apkSize = anyApkSize
         }
         if (apkUrl.isNullOrEmpty()) throw IllegalStateException("noApkAsset")
 
@@ -596,8 +648,8 @@ class MainActivity : FlutterActivity() {
 
         return mapOf(
             "tagName" to json.optString("tag_name"),
-            "htmlUrl" to json.optString("html_url"),
-            "notes" to json.optString("body"),
+            "htmlUrl" to json.optString("html_url").ifBlank { "https://github.com/$repo/releases" },
+            "notes" to json.optString("body").replace("\r\n", "\n").ifBlank { null },
             "apkName" to apkName,
             "apkUrl" to apkUrl,
             "apkSizeBytes" to apkSize,
@@ -605,8 +657,35 @@ class MainActivity : FlutterActivity() {
         )
     }
 
+    /** APK → the APP-PRIVATE updates dir (toadFILES' proven layout). From
+     *  here the initiating app can always read the job back through
+     *  DownloadManager's own content URI — zero storage permissions, every
+     *  Android from 7 to 15. Public Downloads + COLUMN_LOCAL_URI was the
+     *  v0.12 break: scoped storage made that file unreadable to us, so
+     *  every install handoff died as "failed". The stale destination is
+     *  deleted before enqueue because DownloadManager refuses to overwrite
+     *  an existing file — this is what makes a retry actually re-download. */
     private fun enqueueApk(url: String, fileName: String, title: String): Long {
-        return newDownload(url, title, fileName, true, "application/vnd.android.package-archive")
+        val name = fileName.takeLastWhile { it != '/' && it != '\\' }
+            .ifBlank { "toadlauncher-update.apk" }
+        val dest = File(appPrivateUpdatesDir(), name)
+        if (dest.exists() && !dest.delete()) throw IllegalStateException("downloadUnavailable")
+        val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+        return try {
+            dm.enqueue(
+                DownloadManager.Request(Uri.parse(url))
+                    .setTitle(title)
+                    .setDescription("toadLAUNCHER update")
+                    .setMimeType("application/vnd.android.package-archive")
+                    .setNotificationVisibility(
+                        DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED,
+                    )
+                    .setAllowedOverMetered(true)
+                    .setDestinationUri(Uri.fromFile(dest)),
+            )
+        } catch (e: Exception) {
+            throw IllegalStateException("downloadUnavailable")
+        }
     }
 
     private fun downloadProgress(id: Number): Map<String, Any> {
@@ -652,6 +731,16 @@ class MainActivity : FlutterActivity() {
 
     private fun readDownload(id: Long): ByteArray? {
         val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+        // Preferred: the job's own content URI — always readable by the app
+        // that enqueued it, whatever the destination type or Android version.
+        try {
+            dm.openDownloadedFile(id)?.use { pfd ->
+                return android.os.ParcelFileDescriptor.AutoCloseInputStream(pfd)
+                    .use { it.readBytes() }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "openDownloadedFile fell back to local uri", e)
+        }
         val query = DownloadManager.Query().setFilterById(id)
         dm.query(query)?.use { cursor ->
             if (cursor.moveToFirst()) {
@@ -670,50 +759,72 @@ class MainActivity : FlutterActivity() {
         return null
     }
 
+    /** SHA-256 gate (streamed, never the whole APK in RAM), then the
+     *  toadFILES install handoff: the job's own DownloadManager content URI
+     *  handed to the system installer via ACTION_VIEW with a read grant.
+     *  The v0.12 PackageInstaller-session path is gone — it buffered the
+     *  whole APK, never registered its status receiver, died quietly on
+     *  ROMs that refuse mutable PendingIntents, and referenced
+     *  PackageInstaller WITHOUT its import (the committed tree could not
+     *  even compile — the true "update is broken" root). */
     private fun installDownloadedApk(id: Number, expectedSha256: String?): String {
-        val bytes = readDownload(id.toLong()) ?: return "failed"
+        val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+        val uri = dm.getUriForDownloadedFile(id.toLong()) ?: return "failed"
 
         if (expectedSha256 != null) {
-            val digest = MessageDigest.getInstance("SHA-256").digest(bytes)
-            val hex = digest.joinToString("") { "%02x".format(it) }
-            if (!hex.equals(expectedSha256.lowercase(), ignoreCase = false)) return "checksumFailed"
+            try {
+                val digest = MessageDigest.getInstance("SHA-256")
+                contentResolver.openInputStream(uri)?.use { input ->
+                    val buf = ByteArray(64 * 1024)
+                    while (true) {
+                        val n = input.read(buf)
+                        if (n <= 0) break
+                        digest.update(buf, 0, n)
+                    }
+                } ?: return "failed"
+                val hex = digest.digest().joinToString("") { "%02x".format(it) }
+                if (!hex.equals(expectedSha256.lowercase(), ignoreCase = true)) {
+                    return "checksumFailed"
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "checksum stream failed", e)
+                return "failed"
+            }
         }
 
-        if (!packageManager.canRequestPackageInstalls()) {
-            try {
+        // "Install unknown apps" gate — open the exact settings toggle;
+        // the banner's retry row resumes after the flip (toadFILES flow).
+        val canInstall = try {
+            packageManager.canRequestPackageInstalls()
+        } catch (e: Exception) {
+            false
+        }
+        if (!canInstall) {
+            return try {
                 startActivity(
                     Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")),
                 )
+                "needsPermission"
             } catch (e: Exception) {
                 Log.w(TAG, "unknown-sources settings unavailable", e)
+                "needsPermission"
             }
-            return "needsPermission"
         }
 
-        try {
-            val installer = packageManager.packageInstaller
-            val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
-            val sessionId = installer.createSession(params)
-            val session = installer.openSession(sessionId)
-            try {
-                val out = session.openWrite("toadlauncher.apk", 0, bytes.size.toLong())
-                out.write(bytes)
-                session.fsync(out)
-                out.close()
-                val intent = Intent(ACTION_INSTALL_STATUS).setPackage(packageName)
-                val pi = android.app.PendingIntent.getBroadcast(
-                    this, 0, intent,
-                    android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_MUTABLE,
-                )
-                session.commit(pi.intentSender)
-            } catch (e: Exception) {
-                session.abandon()
-                throw e
+        return try {
+            val install = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndTypeAndNormalize(uri, "application/vnd.android.package-archive")
+                clipData = android.content.ClipData.newRawUri(null, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                // The handoff can complete while the launcher is backgrounded;
+                // NEW_TASK keeps the start legal from any context.
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
-            return "started"
+            startActivity(install)
+            "started"
         } catch (e: Exception) {
-            Log.w(TAG, "package installer failed", e)
-            return "failed"
+            Log.w(TAG, "installer handoff failed", e)
+            "failed"
         }
     }
 
@@ -1010,7 +1121,6 @@ class MainActivity : FlutterActivity() {
         private const val TAG = "toadLAUNCHER"
         private const val CHANNEL = "family.toad.launcher/device"
         private const val PICK_WALLPAPER = 7001
-        private const val ACTION_INSTALL_STATUS = "family.toad.launcher.INSTALL_STATUS"
         private const val WIDGET_HOST_ID = 0x70AD
         const val VIEW_TYPE = "toad-widget-host"
     }
