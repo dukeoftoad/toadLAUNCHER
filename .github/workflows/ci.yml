@@ -48,17 +48,12 @@ jobs:
       - name: Build release APK (CI re-signs it later; gradle falls back to debug here)
         run: flutter build apk --release
 
-      # PRV-01 — the no-INTERNET invariant, machine-verified on the BUILT
-      # APK (the merged manifest is ground truth; plugins can add
-      # permissions silently, the gate catches them). Only allow-listed
-      # permissions may ship.
       - name: Permission gate (PRV-01 — no INTERNET, ever)
         run: |
           AAPT="$ANDROID_HOME/build-tools/37.0.0/aapt"
           APK="build/app/outputs/flutter-apk/app-release.apk"
           echo "--- permissions in the built APK ---"
           "$AAPT" dump permissions "$APK" || true
-          # aapt quotes the names: name='android.permission.X'
           ALLOW='android.permission.QUERY_ALL_PACKAGES|android.permission.SET_WALLPAPER|android.permission.REQUEST_DELETE_PACKAGES|android.permission.REQUEST_INSTALL_PACKAGES|android.permission.PACKAGE_USAGE_STATS|family.toad.launcher.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION'
           BAD=$("$AAPT" dump permissions "$APK" 2>/dev/null \
             | sed -n "s/^uses-permission: name=['\"]\{0,1\}\([^'\"]*\)['\"]\{0,1\}$/\1/p" \
@@ -84,7 +79,6 @@ jobs:
 
   release:
     name: Signed release (key rotation + update signature)
-    # Runs when a v* tag is pushed (git tag v1.1.0 && git push origin v1.1.0).
     if: startsWith(github.ref, 'refs/tags/v')
     needs: verify
     runs-on: ubuntu-latest
@@ -129,11 +123,6 @@ jobs:
           echo "$UPDATE_KEY_B64" | base64 -d > /tmp/toad-update-signing.pem
           ls -la /tmp/*.jks /tmp/*.pem
 
-      # SEC-01 — the APK signature scheme v3 rotation:
-      #   v2  = the retired (lineage-root) key  → Android 8 keeps updating
-      #   v3  = the new 4096-bit key + lineage  → Android 9+ (rollback
-      #         capability REVOKED for the old key: it can never retake
-      #         the app, even though it leaked into git history)
       - name: Sign with rotation lineage (old key v2 · new key v3)
         run: |
           APKSIGNER="$ANDROID_HOME/build-tools/37.0.0/apksigner"
@@ -156,12 +145,9 @@ jobs:
           "$APKSIGNER" verify --verbose "$APK"
           CERTS=$("$APKSIGNER" verify --print-certs "$APK")
           echo "$CERTS"
-          # The v3 signer must be the CURRENT key (see SECURITY.md).
           echo "$CERTS" | grep -q \
             "5fdadde01fdf2517a70aac86f315887cb79b74a0d478796f0d4bf40ccb7ac6b6" \
             || { echo "::error::v3 signer is not the current release key"; exit 1; }
-          # The lineage must be embedded and list the retired key without
-          # rollback capability.
           "$APKSIGNER" lineage --in "$APK" --print-certs | tee /tmp/lineage.txt
           grep -q "Has rollback capability      : false" /tmp/lineage.txt \
             || { echo "::error::lineage rollback capability must stay false"; exit 1; }
@@ -192,14 +178,9 @@ jobs:
           ( cd dist && sha256sum "$ASSET" > "$ASSET.sha256" )
           SHA=$(awk '{print $1}' "dist/$ASSET.sha256")
 
-          # SEC-02 — the detached update signature over
-          # "tagName|sha256|assetName" with the ECDSA update key (CI-only
-          # private half; the app embeds the public half and REFUSES
-          # unsigned releases).
           printf 'v%s|%s|%s' "$VER" "$SHA" "$ASSET" > /tmp/update-msg.txt
           openssl dgst -sha256 -sign /tmp/toad-update-signing.pem \
             -out "dist/$ASSET.sig" /tmp/update-msg.txt
-          # Round-trip sanity: verify with the embedded public key.
           openssl ec -in /tmp/toad-update-signing.pem -pubout -out /tmp/toad-update-public.pem
           openssl dgst -sha256 -verify /tmp/toad-update-public.pem \
             -signature "dist/$ASSET.sig" /tmp/update-msg.txt

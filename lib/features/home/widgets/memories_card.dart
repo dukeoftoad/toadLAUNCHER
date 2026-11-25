@@ -1,6 +1,3 @@
-/// Memories card — the toadGALLERY "On this day" strip (content contract,
-/// mocked in demo mode). Removing it reflows the grid; shipped as a hero
-/// widget above the app grid.
 library;
 
 import 'package:material_ui/material_ui.dart';
@@ -50,7 +47,6 @@ class MemoriesCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.baseline,
                     textBaseline: TextBaseline.alphabetic,
                     children: [
-                      // Caveat 700 · 23 · accent-ink.
                       Text(
                         data.title,
                         style: ToadType.caveat(

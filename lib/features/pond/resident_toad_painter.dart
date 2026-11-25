@@ -1,11 +1,3 @@
-/// The resident toad — exact geometry from the proposal's SVG
-/// (viewBox 0 0 120 80), plus the stage-4 ambient behaviors:
-///
-///   blink — two-frame eyelid swap, schedule from the ambient clock
-///   croak — throat scale 1→1.9→.75→1.45→1 over 900 ms, once per tap
-///   night — closed lids, slower bob handled widget-side, drifting z's
-///   wake  — tapping the pad before sunrise blinks him awake with a
-///           grumpy croak (flat mouth, eyeballs open)
 library;
 
 import 'package:material_ui/material_ui.dart';
@@ -23,20 +15,14 @@ class ResidentToadPainter extends CustomPainter {
 
   final PondPalette palette;
 
-  /// True during the 180 ms eyelid swap.
   final bool blinking;
 
-  /// 0..1 progress through the 900 ms croak (0 = idle).
   final double croak;
 
-  /// Night tap-to-wake override — eyeballs open past sunset.
   final bool awake;
 
-  /// The grumpy wake-up face: a flat, unimpressed mouth line.
   final bool grumpy;
 
-  /// Throat scale through the croak keyframes
-  /// (1 → 1.9 @45% → .75 @55% → 1.45 @75% → 1 @100%, 900 ms).
   static double throatScale(double t) {
     if (t <= 0 || t >= 1) return 1;
     if (t < 0.45) return 1 + (1.9 - 1) * (t / 0.45);
@@ -54,7 +40,6 @@ class ResidentToadPainter extends CustomPainter {
 
     final fill = Paint();
 
-    // Feet.
     fill.color = p.toadFeet;
     canvas.drawOval(
       Rect.fromCenter(
@@ -73,8 +58,6 @@ class ResidentToadPainter extends CustomPainter {
       fill,
     );
 
-    // Body: M16 56 C12 30 34 16 60 16 C86 16 108 30 104 56
-    //       C102 66 92 72 60 72 C28 72 18 66 16 56 Z
     final body = Path()
       ..moveTo(16 * sx, 56 * sy)
       ..cubicTo(12 * sx, 30 * sy, 34 * sx, 16 * sy, 60 * sx, 16 * sy)
@@ -85,7 +68,6 @@ class ResidentToadPainter extends CustomPainter {
     fill.color = p.toadBody;
     canvas.drawPath(body, fill);
 
-    // Belly.
     fill.color = p.toadBelly;
     canvas.drawOval(
       Rect.fromCenter(
@@ -96,14 +78,12 @@ class ResidentToadPainter extends CustomPainter {
       fill,
     );
 
-    // Eye bumps.
     fill.color = p.toadBody;
     canvas.drawCircle(Offset(37 * sx, 19 * sy), 13 * sx, fill);
     canvas.drawCircle(Offset(83 * sx, 19 * sy), 13 * sx, fill);
 
     final eyesShut = nightAsleep || blinking;
     if (eyesShut) {
-      // Closed lids — curved strokes (deeper when grumpy-awake blinks off).
       final lid = Paint()
         ..color = p.toadDetail
         ..strokeWidth = 2.4 * sx
@@ -118,7 +98,6 @@ class ResidentToadPainter extends CustomPainter {
       canvas.drawPath(left, lid);
       canvas.drawPath(right, lid);
     } else {
-      // Awake: eyeballs, pupils, shines.
       fill.color = p.toadEye;
       canvas.drawCircle(Offset(37 * sx, 18 * sy), 8.5 * sx, fill);
       canvas.drawCircle(Offset(83 * sx, 18 * sy), 8.5 * sx, fill);
@@ -132,12 +111,10 @@ class ResidentToadPainter extends CustomPainter {
       canvas.drawCircle(Offset(82 * sx, 16.5 * sy), 1.6 * sx, fill);
     }
 
-    // Nostrils.
     fill.color = p.toadDetail;
     canvas.drawCircle(Offset(54 * sx, 30 * sy), 1.5 * sx, fill);
     canvas.drawCircle(Offset(66 * sx, 30 * sy), 1.5 * sx, fill);
 
-    // Spots.
     canvas.drawCircle(
       Offset(28 * sx, 38 * sy),
       4 * sx,
@@ -156,7 +133,6 @@ class ResidentToadPainter extends CustomPainter {
       );
     }
 
-    // Mouth: the smile, or the grumpy flat line.
     final mouth = Paint()
       ..color = p.toadDetail
       ..strokeWidth = 2 * sx
@@ -171,7 +147,6 @@ class ResidentToadPainter extends CustomPainter {
             ..quadraticBezierTo(60 * sx, 50 * sy, 82 * sx, 42 * sy));
     canvas.drawPath(mouthPath, mouth);
 
-    // Throat — scales through the croak keyframes; day or grumpily awake.
     final throatVisible = !nightAsleep;
     if (throatVisible) {
       final scale = throatScale(croak);
@@ -187,7 +162,6 @@ class ResidentToadPainter extends CustomPainter {
       );
       canvas.restore();
 
-      // The croak note ♪ — floats up-right during the middle of the croak.
       if (croak > 0.55 && croak < 1) {
         final noteT = (croak - 0.55) / 0.45;
         final opacity = noteT < 0.3 ? noteT / 0.3 : 1 - (noteT - 0.3) / 0.7;
@@ -203,8 +177,6 @@ class ResidentToadPainter extends CustomPainter {
     }
   }
 
-  /// Caveat-styled croak note — drawn as paths so it lives inside the
-  /// painter (the widget layer adds an accessibility label instead).
   void _paintNote(
     Canvas canvas,
     Offset center,
@@ -218,7 +190,6 @@ class ResidentToadPainter extends CustomPainter {
       ..strokeWidth = 2 * sx
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
-    // Stem + note head.
     canvas.drawLine(
       Offset(center.dx, center.dy + 8 * sy),
       Offset(center.dx, center.dy - 8 * sy),

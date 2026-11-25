@@ -1,17 +1,7 @@
-/// toadLAUNCHER design tokens — Section 2 of the design proposal v1.1.
-///
-/// Single source of truth for every colour, gradient, radius and
-/// type-scale value used by the launcher. Do not hard-code hex values
-/// elsewhere; import this file instead.
 library;
 
 import 'package:material_ui/material_ui.dart';
 
-/// ---------------------------------------------------------------------------
-/// SKETCHBOOK SKINS (Light / Dark / AMOLED)
-/// ---------------------------------------------------------------------------
-
-/// Light "Sketchbook".
 const ToadPalette kLightPalette = ToadPalette(
   paper: Color(0xFFF7F1E6),
   surface: Color(0xFFFFFCF5),
@@ -29,7 +19,6 @@ const ToadPalette kLightPalette = ToadPalette(
   statusIconBrightness: Brightness.dark,
 );
 
-/// Dark "Night sketchbook".
 const ToadPalette kDarkPalette = ToadPalette(
   paper: Color(0xFF171613),
   surface: Color(0xFF201E1A),
@@ -47,7 +36,6 @@ const ToadPalette kDarkPalette = ToadPalette(
   statusIconBrightness: Brightness.light,
 );
 
-/// AMOLED "black paper".
 const ToadPalette kAmoledPalette = ToadPalette(
   paper: Color(0xFF000000),
   surface: Color(0xFF12110F),
@@ -65,11 +53,6 @@ const ToadPalette kAmoledPalette = ToadPalette(
   statusIconBrightness: Brightness.light,
 );
 
-/// ---------------------------------------------------------------------------
-/// POND PRO "live water" — scene skin (day + night)
-/// ---------------------------------------------------------------------------
-
-/// Pond Pro day scene tokens.
 const PondPalette kPondDay = PondPalette(
   skyStops: <(double, Color)>[
     (0.00, Color(0xFFDCE9D4)),
@@ -119,7 +102,6 @@ const PondPalette kPondDay = PondPalette(
   isNight: false,
 );
 
-/// Pond Pro night scene tokens.
 const PondPalette kPondNight = PondPalette(
   skyStops: <(double, Color)>[
     (0.00, Color(0xFF101722)),
@@ -172,11 +154,6 @@ const PondPalette kPondNight = PondPalette(
   isNight: true,
 );
 
-/// ---------------------------------------------------------------------------
-/// TOKEN MODELS
-/// ---------------------------------------------------------------------------
-
-/// Colour tokens shared by the three sketchbook skins.
 class ToadPalette {
   const ToadPalette({
     required this.paper,
@@ -207,17 +184,12 @@ class ToadPalette {
   final Color gold;
   final Color danger;
 
-  /// Soft halo colour painted behind app labels for wallpaper contrast.
   final Color labelHalo;
 
-  /// Strength multiplier for the wallpaper glow radials (1 / .5 / .35).
   final double wallpaperGlowStrength;
 
   final Brightness statusIconBrightness;
 
-  /// Palette with the user-chosen accent re-tinted in (highlights, toggles,
-  /// badges). Wash and accent-ink are derived so custom accents still feel
-  /// sketchbook.
   ToadPalette withAccent(Color accent) {
     final wash = Color.alphaBlend(accent.withValues(alpha: 0.14), paper);
     final accentInk = Color.alphaBlend(accent.withValues(alpha: 0.72), ink);
@@ -240,7 +212,6 @@ class ToadPalette {
   }
 }
 
-/// Pond Pro scene tokens (day or night).
 class PondPalette {
   const PondPalette({
     required this.skyStops,
@@ -327,11 +298,6 @@ class PondPalette {
   final bool isNight;
 }
 
-/// ---------------------------------------------------------------------------
-/// RADII, SIZES, MOTION
-/// ---------------------------------------------------------------------------
-
-/// Corner radius scale: 22 card · 17 icon tile · 12 inner · 999 pill.
 abstract final class ToadRadii {
   static const double card = 22;
   static const double iconTile = 17;
@@ -345,22 +311,18 @@ abstract final class ToadRadii {
   static const double settingsGroup = 20;
   static const double popoverItem = 13;
   static const double settingsIconChip = 11;
-  static const double squircleIcon = 9; // "square-ish" icon shape option
+  static const double squircleIcon = 9;
   static const double pill = 999;
 }
 
-/// Fixed layout metrics from the proposal (352x786 reference surface).
 abstract final class ToadMetrics {
-  /// Reference design surface used to scale relative artwork positions.
   static const Size referenceScreen = Size(352, 786);
 
-  // Hero.
   static const double heroClockSize = 78;
   static const double heroDateSize = 16.5;
   static const double heroSideSize = 11.5;
   static const double reflectionClockSize = 58;
 
-  // App grid.
   static const double gridIconSize = 54;
   static const double dockIconSize = 48;
   static const double pondIconSize = 48;
@@ -371,24 +333,19 @@ abstract final class ToadMetrics {
   static const int defaultColumns = 4;
   static const int optionalColumns = 5;
 
-  /// Grid cell pitch used by edit mode ("honest snapping").
   static const double editRowPitch = 136;
 
-  // Memories card.
   static const double memoryPhotoHeight = 64;
   static const double memoryPhotoRadius = 14;
   static const double memoryTitleSize = 23;
 
-  // Dock.
   static const double dockRadius = ToadRadii.dock;
   static const EdgeInsets dockMargin = EdgeInsets.fromLTRB(12, 0, 12, 14);
   static const EdgeInsets dockPadding = EdgeInsets.fromLTRB(10, 12, 10, 10);
 
-  // Page dots.
   static const double pageDotSize = 6.5;
   static const double pageDotActiveWidth = 18;
 
-  // Pond.
   static const double pondCellWidth = 104;
   static const double pondPadWidth = 100;
   static const double pondPadHeight = 71;
@@ -399,15 +356,12 @@ abstract final class ToadMetrics {
   static const double toadWidth = 82;
   static const double toadHeight = 55;
 
-  // Widget picker previews (stage 3).
   static const double widgetPreviewWidth = 92;
   static const double widgetPreviewHeight = 56;
 
-  // Edit-mode selection handles (stage 3).
   static const double resizeHandleSize = 15;
 }
 
-/// Motion timings — Section 14 timing table (authoritative).
 abstract final class ToadMotion {
   static const Duration sharedAxisFolderOpen = Duration(milliseconds: 240);
   static const Duration popoverScaleIn = Duration(milliseconds: 180);
@@ -427,51 +381,42 @@ abstract final class ToadMotion {
   static const Duration reedSway = Duration(milliseconds: 5600);
 }
 
-/// ---------------------------------------------------------------------------
-/// DEMO APP ICON GRADIENTS (g1..g8 + the toad-family green)
-/// ---------------------------------------------------------------------------
-
-/// 145-degree gradients per the proposal's icon palette.
 abstract final class AppIconGradients {
-  /// toad family — toadGALLERY and family apps.
   static const List<Color> toad = [Color(0xFF6B9E47), Color(0xFF3C5E2A)];
 
   static const List<List<Color>> all = [
-    [Color(0xFF69A05E), Color(0xFF3E6E3A)], // g1 green
-    [Color(0xFF5B9BD5), Color(0xFF2F5E8F)], // g2 blue
-    [Color(0xFFE0B04E), Color(0xFFA97424)], // g3 amber
-    [Color(0xFFDF7E5B), Color(0xFFA34526)], // g4 orange
-    [Color(0xFF9E7BD5), Color(0xFF5F3E9C)], // g5 purple
-    [Color(0xFF58AFAE), Color(0xFF266B6C)], // g6 teal
-    [Color(0xFFD56E8E), Color(0xFF94355A)], // g7 pink
-    [Color(0xFF8A929E), Color(0xFF4C5361)], // g8 grey
+    [Color(0xFF69A05E), Color(0xFF3E6E3A)],
+    [Color(0xFF5B9BD5), Color(0xFF2F5E8F)],
+    [Color(0xFFE0B04E), Color(0xFFA97424)],
+    [Color(0xFFDF7E5B), Color(0xFFA34526)],
+    [Color(0xFF9E7BD5), Color(0xFF5F3E9C)],
+    [Color(0xFF58AFAE), Color(0xFF266B6C)],
+    [Color(0xFFD56E8E), Color(0xFF94355A)],
+    [Color(0xFF8A929E), Color(0xFF4C5361)],
   ];
 
-  /// Memories-strip photo placeholders (amber / green / steel-blue).
   static const List<List<Color>> memoryPhotos = [
     [Color(0xFFD9A441), Color(0xFF8A5A2B)],
     [Color(0xFF7FA45B), Color(0xFF3F5E2C)],
     [Color(0xFF6E8FAF), Color(0xFF39536E)],
   ];
 
-  /// Bundled sketchbook wallpapers (screen 9). Selected = index 0.
   static const List<List<Color>> wallpapers = [
-    [Color(0xFFB7C9A0), Color(0xFF5F8746), Color(0xFF33502A)], // sage
-    [Color(0xFFEAD9B0), Color(0xFFC9A227), Color(0xFF8A6C1B)], // gold
-    [Color(0xFFD9A8A0), Color(0xFFA45C50)], // rose
-    [Color(0xFF9FB6C9), Color(0xFF4E6B84)], // steel
-    [Color(0xFF3E3B33), Color(0xFF191813)], // charcoal
-    [Color(0xFF101010), Color(0xFF000000)], // amoled
-    [Color(0xFF57624B), Color(0xFF1D2318)], // forest
+    [Color(0xFFB7C9A0), Color(0xFF5F8746), Color(0xFF33502A)],
+    [Color(0xFFEAD9B0), Color(0xFFC9A227), Color(0xFF8A6C1B)],
+    [Color(0xFFD9A8A0), Color(0xFFA45C50)],
+    [Color(0xFF9FB6C9), Color(0xFF4E6B84)],
+    [Color(0xFF3E3B33), Color(0xFF191813)],
+    [Color(0xFF101010), Color(0xFF000000)],
+    [Color(0xFF57624B), Color(0xFF1D2318)],
   ];
 }
 
-/// The six accent options from Wallpaper & style.
 const List<Color> kAccentOptions = [
-  Color(0xFF4F7A38), // toad green (default)
-  Color(0xFFB4552D), // clay
-  Color(0xFF3F6E8E), // steel
-  Color(0xFF8A5A9C), // plum
-  Color(0xFFC9A227), // gold
-  Color(0xFF2B2924), // ink
+  Color(0xFF4F7A38),
+  Color(0xFFB4552D),
+  Color(0xFF3F6E8E),
+  Color(0xFF8A5A9C),
+  Color(0xFFC9A227),
+  Color(0xFF2B2924),
 ];

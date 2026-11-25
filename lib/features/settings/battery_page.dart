@@ -1,13 +1,3 @@
-/// Battery & pond guard — the drain page.
-///
-/// The pond watches its own energy: live level, measured %/hour (summed
-/// over unplugged spans only), an honest runtime estimate when data
-/// exists, the local history sparkline, and the low-battery calm switch
-/// (≤ 15 % and unplugged → the pond falls night and freezes, exactly
-/// like Calm-pond but driven by the drain).
-///
-/// Demo honesty: when the OS does not answer, the simulated pond battery
-/// says so right in the header — nothing pretends to be a real phone.
 library;
 
 import 'package:flutter/services.dart' show SystemUiOverlayStyle;
@@ -95,7 +85,6 @@ class BatteryPage extends ConsumerWidget {
                   ),
                   const SizedBox(height: 14),
 
-                  // Live status card.
                   Container(
                     padding: const EdgeInsets.all(18),
                     decoration: BoxDecoration(
@@ -157,7 +146,6 @@ class BatteryPage extends ConsumerWidget {
                   ),
                   const SizedBox(height: 14),
 
-                  // Drain math.
                   _GroupCard(
                     palette: palette,
                     children: [
@@ -188,7 +176,6 @@ class BatteryPage extends ConsumerWidget {
                   ),
                   const SizedBox(height: 4),
 
-                  // History sparkline.
                   _GroupCard(
                     palette: palette,
                     children: [
@@ -241,7 +228,6 @@ class BatteryPage extends ConsumerWidget {
                   ),
                   const SizedBox(height: 4),
 
-                  // The guard.
                   _GroupCard(
                     palette: palette,
                     children: [
@@ -368,7 +354,6 @@ class BatteryPage extends ConsumerWidget {
   }
 }
 
-/// One settings row (mirrors the hub's) with an optional trailing widget.
 class _Row extends StatelessWidget {
   const _Row({
     required this.title,
@@ -384,7 +369,6 @@ class _Row extends StatelessWidget {
   final Color ink;
   final ToadPalette palette;
 
-  /// Trailing widget — a pill/chip; wrap plain strings in the caller.
   final Widget? trailing;
   final VoidCallback? onTrailingTap;
 
@@ -454,8 +438,6 @@ class _GroupCard extends StatelessWidget {
   }
 }
 
-/// The drain sparkline — level over the trailing 6 h. Charging spans get
-/// a gold underwash so a charge session reads as a rise, not a lie.
 class _DrainSparklinePainter extends CustomPainter {
   _DrainSparklinePainter({
     required this.samples,
@@ -490,7 +472,6 @@ class _DrainSparklinePainter extends CustomPainter {
     double yOf(BatterySample s) =>
         size.height - ((s.level.clamp(0, 100)) / 100) * (size.height - 8) - 4;
 
-    // Charging underwash.
     final wash = Paint();
     for (var i = 1; i < inWindow.length; i++) {
       final prev = inWindow[i - 1];
@@ -505,7 +486,6 @@ class _DrainSparklinePainter extends CustomPainter {
       );
     }
 
-    // Baseline grid at 25/50/75.
     final grid = Paint()
       ..color = hairline.withValues(alpha: hairline.a * 0.6)
       ..strokeWidth = 1;
@@ -514,7 +494,6 @@ class _DrainSparklinePainter extends CustomPainter {
       canvas.drawLine(Offset(0, y), Offset(size.width, y), grid);
     }
 
-    // The curve itself.
     final line = Paint()
       ..color = accent
       ..strokeWidth = 2.4
@@ -528,7 +507,6 @@ class _DrainSparklinePainter extends CustomPainter {
     }
     canvas.drawPath(path, line);
 
-    // Latest point, filled.
     final last = inWindow.last;
     canvas.drawCircle(
       Offset(xOf(last), yOf(last)),

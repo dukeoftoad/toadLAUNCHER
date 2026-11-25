@@ -1,10 +1,3 @@
-/// Folder open — screen 5 of the proposal.
-///
-/// The card scales out of the folder tile's rect (240 ms shared-axis) over
-/// a dimmed, 6 px-blurred home; icons outside stay recognizable. Caveat
-/// title with inline rename, 3x3 grid, taps launch instantly, long-press
-/// raises the context menu, more than 9 apps paginate with home-style
-/// page dots.
 library;
 
 import 'dart:ui' show ImageFilter;
@@ -50,7 +43,7 @@ class _FolderOverlayState extends ConsumerState<FolderOverlay>
     super.initState();
     _entrance = AnimationController(
       vsync: this,
-      duration: ToadMotion.sharedAxisFolderOpen, // 240 ms
+      duration: ToadMotion.sharedAxisFolderOpen,
     )..forward();
     _renaming = widget.startInRename;
     _renameFocus.addListener(() {
@@ -100,7 +93,6 @@ class _FolderOverlayState extends ConsumerState<FolderOverlay>
     final size = MediaQuery.sizeOf(context);
     final dark = skin.isDark;
 
-    // Folder always reflects the freshest controller state (rename/remove).
     final folder =
         ref
             .watch(homeLayoutProvider)
@@ -116,7 +108,6 @@ class _FolderOverlayState extends ConsumerState<FolderOverlay>
     );
     final labelColor = dark ? const Color(0xFFE8E2D4) : palette.ink;
 
-    // Apps + the trailing "Add app" slot from the mockup.
     final cells = <_FolderCellData>[
       for (final app in folder.apps) _FolderCellData.app(app),
       const _FolderCellData.addApp(),
@@ -133,7 +124,7 @@ class _FolderOverlayState extends ConsumerState<FolderOverlay>
     const double cardMargin = 18;
     final cardWidth = size.width - cardMargin * 2;
     final cardHeight =
-        16 + 30 + 10 + gridHeight + 10 + 15 + 14; // pad + title + gaps + meta
+        16 + 30 + 10 + gridHeight + 10 + 15 + 14;
     final finalRect = Rect.fromLTWH(
       cardMargin,
       (size.height - cardHeight) / 2 - 40,
@@ -160,7 +151,6 @@ class _FolderOverlayState extends ConsumerState<FolderOverlay>
 
             return Stack(
               children: [
-                // Backdrop: home dims to 45% with a 6 px blur.
                 Positioned.fill(
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
@@ -226,7 +216,6 @@ class _FolderCellData {
   final bool isAddSlot;
 }
 
-/// The card interior: title, 3x3 (paged) grid, dots, meta line.
 class _FolderCard extends StatelessWidget {
   const _FolderCard({
     required this.folder,
@@ -473,7 +462,6 @@ class _FolderGridItem extends StatelessWidget {
   }
 }
 
-/// Open-folder request the host listens to (raised from folder-tile menus).
 final StateNotifierProvider<OpenFolderController, OpenFolderRequest?>
 openFolderProvider =
     StateNotifierProvider<OpenFolderController, OpenFolderRequest?>(
@@ -501,7 +489,6 @@ class OpenFolderController extends StateNotifier<OpenFolderRequest?> {
   void close() => state = null;
 }
 
-/// Long-press inside the folder → the host shows the folderApp menu.
 final StateNotifierProvider<FolderItemMenuController, DrawerMenuRequest?>
 openFolderMenuProvider =
     StateNotifierProvider<FolderItemMenuController, DrawerMenuRequest?>(

@@ -1,15 +1,3 @@
-/// Auto-update engine — the toadFILES self-update pattern, ported to the
-/// launcher's Riverpod state and its zero-INTERNET promise.
-///
-/// Flow (identical user-visible behavior to toadFILES v2.x):
-///   · one silent check per process on start — failure is invisible
-///   · a subtle "vX available" banner card when a newer release with an
-///     APK asset exists
-///   · the manual check (Settings → Device & updates) shows errors
-///   · download via the system DownloadManager (its process holds the
-///     network, ours never needs the INTERNET permission)
-///   · progress polled every 500 ms from the same system job
-///   · SHA-256 gate, then the system installer dialog
 library;
 
 import 'dart:async';
@@ -22,7 +10,6 @@ import '../settings/launcher_settings.dart';
 import 'device_bridge.dart';
 import 'toad_family.dart';
 
-/// All the engine can be in. Honest states — nothing pretends.
 sealed class UpdateState {
   const UpdateState();
 }
@@ -66,8 +53,6 @@ class UpdateReadyToInstall extends UpdateState {
   final int downloadId;
 }
 
-/// The APK is downloaded but "Install unknown apps" is off — the exact
-/// settings toggle was opened; the user retries from the banner.
 class UpdateNeedsInstallPermission extends UpdateState {
   const UpdateNeedsInstallPermission({
     required this.release,
@@ -77,9 +62,6 @@ class UpdateNeedsInstallPermission extends UpdateState {
   final int downloadId;
 }
 
-/// SEC-02: the release could not be proven ours — the detached signature
-/// was missing or invalid. The update is refused BEFORE any banner says
-/// “available”; the honest fix is the release page in the browser.
 class UpdateUnverified extends UpdateState {
   const UpdateUnverified({required this.release});
   final ReleaseInfo release;
@@ -95,13 +77,6 @@ class UpdateFailed extends UpdateState {
   final String message;
 }
 
-/// Component-wise version compare — a faithful port of toadFILES'
-/// VersionCompare (the shape GitHub tags actually use): optional leading
-/// "v", dot/dash parts compare numerically ("1.10.0" > "1.9.0"), a
-/// missing pre-release suffix means the stable release ("1.7.0-beta" <
-/// "1.7.0"), and build metadata ("+41") rides inside the suffix. A tag
-/// with no numeric parts at all parses as 0 — a malformed tag can never
-/// push an update. Pure Dart, no platform calls — unit-testable.
 int compareVersions(String a, String b) {
   final left = _parseVersion(a);
   final right = _parseVersion(b);
@@ -114,7 +89,7 @@ int compareVersions(String a, String b) {
     final ls = l.suffix;
     final rs = r.suffix;
     if (ls == rs) continue;
-    if (ls == null) return 1; // stable outranks its own pre-releases
+    if (ls == null) return 1;
     if (rs == null) return -1;
     final c = ls.compareTo(rs);
     if (c != 0) return c;
@@ -136,8 +111,6 @@ List<_VersionComponent>? _parseVersion(String version) {
   while (cleaned.startsWith('v')) {
     cleaned = cleaned.substring(1);
   }
-  // Semver rule: build metadata ("+41") never changes precedence —
-  // "0.12.0-beta+41" == "0.12.0-beta" (pinned by device_mode_test).
   final plus = cleaned.indexOf('+');
   if (plus >= 0) cleaned = cleaned.substring(0, plus);
   if (cleaned.isEmpty) return null;
@@ -156,7 +129,6 @@ List<_VersionComponent>? _parseVersion(String version) {
   return out;
 }
 
-/// Riverpod state holder for the update flow.
 class UpdateEngine extends Notifier<UpdateState> {
   bool _startupCheckDone = false;
   Timer? _pollTimer;
@@ -166,28 +138,21 @@ class UpdateEngine extends Notifier<UpdateState> {
 
   DeviceBridge get _bridge => ref.watch(deviceBridgeProvider);
 
-  /// SEC-04: the persisted last-check timestamp (epoch ms).
   static const String _kLastCheckKey = 'toadlauncher.update.lastcheck';
 
-  /// True when the policy allows a silent check right now. Pure and
-  /// unit-testable: [nowMs] - [lastCheckMs] >= policy interval.
   @visibleForTesting
   bool silentCheckAllowed(UpdatePolicy policy, int lastCheckMs, int nowMs) {
     final interval = policy.minInterval;
-    if (interval == null) return false; // off / manual
+    if (interval == null) return false;
     return nowMs - lastCheckMs >= interval.inMilliseconds;
   }
 
-  /// One silent check per process on start — now throttled by the update
-  /// policy (SEC-04: daily by default, not “every process”).
-  /// Respects the settings switch; swallows every failure quietly.
   Future<void> silentStartupCheck() async {
     if (_startupCheckDone) return;
     _startupCheckDone = true;
     final settings = ref.read(launcherSettingsProvider);
     if (!settings.autoUpdateCheck) return;
 
-    // The throttle: never more often than the policy allows.
     int lastCheck = 0;
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -205,9 +170,6 @@ class UpdateEngine extends Notifier<UpdateState> {
       }
       _stampCheck(now);
     } catch (_) {
-      // Intentionally invisible — airplane mode, GitHub down, rate limit.
-      // A failed check does NOT stamp the clock: the next process may try
-      // again (honesty beats strictness for a once-a-day budget).
     }
   }
 
@@ -218,14 +180,9 @@ class UpdateEngine extends Notifier<UpdateState> {
     } catch (_) {}
   }
 
-  /// SEC-02: verify the detached signature over
-  /// “tagName|sha256|assetName” with the embedded update key. Returns the
-  /// state to publish (UpdateAvailable / UpdateUnverified), or null when
-  /// verification is impossible here (let the caller decide).
   @visibleForTesting
   Future<UpdateState?> verifyRelease(ReleaseInfo release) async {
     if (release.sha256 == null || release.sig == null) {
-      // Unsigned release — refuse with the honest handoff.
       return UpdateUnverified(release: release);
     }
     final ok = await _bridge.verifyUpdateSignature(
@@ -239,9 +196,6 @@ class UpdateEngine extends Notifier<UpdateState> {
   Future<UpdateState?> _verifyRelease(ReleaseInfo release) =>
       verifyRelease(release);
 
-  /// The explicit check from the settings page — errors surface. Manual
-  /// checks ignore the throttle (the user asked) but still verify the
-  /// signature before offering anything.
   Future<void> manualCheck() async {
     state = const UpdateChecking();
     try {
@@ -261,7 +215,6 @@ class UpdateEngine extends Notifier<UpdateState> {
     }
   }
 
-  /// "Download & install" — enqueue via DownloadManager, start polling.
   Future<void> download() async {
     final current = state;
     if (current is! UpdateAvailable) return;
@@ -309,9 +262,6 @@ class UpdateEngine extends Notifier<UpdateState> {
     });
   }
 
-  /// SHA-256 gate + signer-certificate gate, then the system installer
-  /// (or the exact settings toggle when "Install unknown apps" is off —
-  /// toadFILES behavior).
   Future<void> _handToInstaller({
     required ReleaseInfo release,
     required int id,
@@ -337,32 +287,22 @@ class UpdateEngine extends Notifier<UpdateState> {
     }
   }
 
-  /// Retry the install handoff after the user granted the toggle.
   Future<void> retryInstall() async {
     final current = state;
     if (current is! UpdateNeedsInstallPermission) return;
     await _handToInstaller(release: current.release, id: current.downloadId);
   }
 
-  /// Open the exact "Install unknown apps" toggle for this package.
   Future<void> openInstallPermissionSettings() async {
-    // The channel opened it during the failed handoff (toadFILES pattern);
-    // nothing more to do here — kept as a hook for the banner's retry row.
   }
 
-  /// Open the GitHub release page in the browser (the browser has network;
-  /// we never do).
   Future<void> openReleasePage() => _bridge.openUrl(kReleasePageUrl);
 
-  /// Back to calm. Banner dismissed, errors cleared. Any in-flight poll
-  /// cancels itself on its next tick because the state no longer matches.
   void dismiss() {
     _pollTimer?.cancel();
     state = const UpdateIdle();
   }
 }
 
-/// The bridge itself as a provider lives in device_bridge.dart next to
-/// its class — import that, not this file, for the bridge.
 final NotifierProvider<UpdateEngine, UpdateState> updateEngineProvider =
     NotifierProvider<UpdateEngine, UpdateState>(UpdateEngine.new);

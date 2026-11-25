@@ -1,5 +1,3 @@
-// Project-level Gradle build script for toadLAUNCHER (standard Flutter
-// template shape — plugin versions live in settings.gradle.kts).
 allprojects {
     repositories {
         google()

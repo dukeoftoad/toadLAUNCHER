@@ -1,14 +1,7 @@
-/// Core domain models for toadLAUNCHER.
-///
-/// The launcher renders from a local app index (design principle 3:
-/// "instant and offline"). In demo mode the index is seeded from
-/// [DemoAppRepository]; on device it comes from the Android package
-/// manager through the same interface.
 library;
 
 import 'package:material_ui/material_ui.dart';
 
-/// One entry in the app index.
 @immutable
 class AppEntry {
   const AppEntry({
@@ -21,24 +14,17 @@ class AppEntry {
     this.badge,
   });
 
-  /// Stable id — android package name on device, demo id in demo mode.
   final String id;
   final String name;
 
-  /// Glyph shown inside the gradient tile (demo icons are the proposal's
-  /// hand-set characters; device mode swaps in real adaptive icons).
   final String glyph;
 
-  /// Palette index g1..g8; ignored when [isFamilyToad] is true.
   final int gradientIndex;
 
-  /// Family apps (toadGALLERY, toadPLAYER) render the shared toad face.
   final bool isFamilyToad;
 
-  /// Android package to launch; null in pure demo entries.
   final String? packageName;
 
-  /// Local-state-only badge text, e.g. "2 missed".
   final String? badge;
 
   AppEntry copyWith({String? badge}) => AppEntry(
@@ -58,7 +44,6 @@ class AppEntry {
   int get hashCode => id.hashCode;
 }
 
-/// A folder ("Media"): 3x3 card, shared-axis open, inline rename.
 @immutable
 class FolderData {
   const FolderData({required this.id, required this.title, required this.apps});
@@ -77,16 +62,12 @@ class FolderData {
   int get hashCode => id.hashCode;
 }
 
-/// One slot on a home page. Home pages mix plain apps with folder tiles;
-/// the drawer and pond rows stay plain [AppEntry] lists.
 sealed class HomeCell {
   const HomeCell();
 
-  /// Label painted under the tile.
   String get label;
 }
 
-/// A plain app icon.
 @immutable
 class AppCell extends HomeCell {
   const AppCell(this.app);
@@ -103,7 +84,6 @@ class AppCell extends HomeCell {
   int get hashCode => app.hashCode;
 }
 
-/// A folder tile: 2x2 mini preview on home, shared-axis card when opened.
 @immutable
 class FolderCell extends HomeCell {
   const FolderCell(this.folder);
@@ -121,7 +101,6 @@ class FolderCell extends HomeCell {
   int get hashCode => folder.hashCode;
 }
 
-/// "On this day" memory strip — toadGALLERY content contract (mocked).
 @immutable
 class MemoryCardData {
   const MemoryCardData({
@@ -131,13 +110,12 @@ class MemoryCardData {
     required this.year,
   });
 
-  final String title; // "On this day"
-  final String meta; // "3 photos · 2025"
+  final String title;
+  final String meta;
   final int photoCount;
   final int year;
 }
 
-/// Resolved home layout: pages + dock + recents + drawer data.
 @immutable
 class HomeLayout {
   const HomeLayout({
@@ -153,16 +131,12 @@ class HomeLayout {
   final List<List<HomeCell>> pages;
   final List<AppEntry> dock;
 
-  /// Last 4 launched (demo-seeded; [HomeController.recordLaunch] maintains).
   final List<AppEntry> recents;
 
-  /// Alphabetically sorted full index.
   final List<AppEntry> allApps;
   final List<FolderData> folders;
   final MemoryCardData memory;
 
-  /// Widgets placed on home pages (stage 3). The Caveat clock is seeded by
-  /// the controller so the hero zone stays the clock's own render.
   final List<PlacedWidget> widgets;
 
   HomeLayout copyWith({
@@ -183,12 +157,9 @@ class HomeLayout {
     );
   }
 
-  /// Widgets living on one page, in stack order (top of page first).
   List<PlacedWidget> widgetsOnPage(int page) =>
       widgets.where((w) => w.page == page).toList();
 
-  /// Current copy of a folder by id (pages and the folders list are patched
-  /// together by the controller; read through here for the freshest state).
   FolderData? folderById(String id) {
     for (final f in folders) {
       if (f.id == id) return f;
@@ -197,16 +168,8 @@ class HomeLayout {
   }
 }
 
-/// Widget kinds offered by the picker (screen 8). `androidHosted` is the
-/// v0.11 addition: a real AppWidgetHost view living on the home grid.
 enum WidgetKind { clock, memories, calendar, sticky, androidHosted }
 
-/// One placed widget. Spans are in 4-column grid cells; heights in
-/// icon-row units (the honest edit-mode pitch).
-///
-/// For [WidgetKind.androidHosted] the widget also carries the Android
-/// side of the deal: the provider component, the AppWidgetHost id and a
-/// display label — persisted so the host view survives restarts.
 @immutable
 class PlacedWidget {
   const PlacedWidget({
@@ -227,7 +190,6 @@ class PlacedWidget {
   final int w;
   final int h;
 
-  /// Hosted-widget extras (null for the local engines).
   final String? providerId;
   final int? appWidgetId;
   final String? label;

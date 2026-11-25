@@ -1,11 +1,3 @@
-/// toadLIST screen — the launcher's own todo list with comments.
-///
-/// Sketchbook paper, Patrick Hand rows, Caveat header — the same calm as
-/// every other toad page:
-///   · add a fly at the top pill, tick it when caught
-///   · tap a task to unfold its comments — small notes pinned under it
-///   · filter all / open / done; destructive actions confirm
-///   · nothing leaves the device, ever (SharedPreferences, offline-first)
 library;
 
 import 'package:flutter/services.dart' show SystemUiOverlayStyle;
@@ -18,8 +10,6 @@ import '../../shared/widgets/toad_toast.dart';
 import '../home/home_controller.dart';
 import 'todo_store.dart';
 
-/// Entry point — the drawer's pinned row, the settings hub and the
-/// sticky widget all land here.
 Future<void> openTodoList(BuildContext context) {
   return Navigator.of(context).push(
     MaterialPageRoute<void>(builder: (_) => const TodoListScreen()),
@@ -220,7 +210,6 @@ class _TodoListScreenState extends ConsumerState<TodoListScreen> {
               constraints: const BoxConstraints(maxWidth: 440),
               child: Column(
                 children: [
-                  // Header — same chrome as the settings hub.
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                     child: Row(
@@ -295,7 +284,6 @@ class _TodoListScreenState extends ConsumerState<TodoListScreen> {
                   ),
                   const SizedBox(height: 12),
 
-                  // Add-a-fly pill.
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
                     child: Container(
@@ -356,7 +344,6 @@ class _TodoListScreenState extends ConsumerState<TodoListScreen> {
                     ),
                   ),
 
-                  // Filter chips.
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
                     child: Row(
@@ -398,7 +385,6 @@ class _TodoListScreenState extends ConsumerState<TodoListScreen> {
                     ),
                   ),
 
-                  // The list itself.
                   Expanded(
                     child: visible.isEmpty
                         ? Padding(
@@ -456,8 +442,6 @@ class _TodoListScreenState extends ConsumerState<TodoListScreen> {
   }
 }
 
-/// One task — sticky paper with a hand-drawn checkbox; unfolds into its
-/// comments. Long-press re-words, the ✕ confirms before releasing.
 class _TaskCard extends StatefulWidget {
   const _TaskCard({
     required this.task,
@@ -528,7 +512,6 @@ class _TaskCardState extends State<_TaskCard> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Hand-drawn checkbox.
               GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: widget.onToggle,
@@ -610,7 +593,6 @@ class _TaskCardState extends State<_TaskCard> {
                 ),
               ),
               const SizedBox(width: 6),
-              // Unfold chevron.
               GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: widget.onToggleExpand,
@@ -625,7 +607,6 @@ class _TaskCardState extends State<_TaskCard> {
             ],
           ),
 
-          // Unfolded: comments + inputs.
           if (widget.expanded) ...[
             const SizedBox(height: 8),
             Container(height: 1, color: palette.hairline),
@@ -678,7 +659,6 @@ class _TaskCardState extends State<_TaskCard> {
                     ],
                   ),
                 ),
-            // Comment input.
             Container(
               decoration: BoxDecoration(
                 color: palette.accentWash,
@@ -712,7 +692,6 @@ class _TaskCardState extends State<_TaskCard> {
               ),
             ),
             const SizedBox(height: 8),
-            // Row actions: re-word · release.
             Row(
               children: [
                 GestureDetector(

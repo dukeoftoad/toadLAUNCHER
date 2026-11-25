@@ -1,12 +1,3 @@
-/// Placed-widget render engines — screen 8's promise: "previews are real
-/// renders (same engines as the placed widget), never stock images".
-///
-/// One file holds every engine so the picker previews and the home widget
-/// zone share exactly the same code paths:
-///   clock    — Caveat clock, re-renders live at every span (screen 7)
-///   memories — toadGALLERY on-this-day strip (featured, 4×2)
-///   calendar — real month grid for the current month (4×4, local only)
-///   sticky   — Patrick Hand scribble (2×2)
 library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -23,15 +14,10 @@ import '../../features/todo/todo_store.dart' show todoListProvider;
 import 'android_widget_view.dart';
 import 'clock_faces.dart';
 
-/// Span → clock scale. 4×1 (the default hero) renders exactly 1.0 — the
-/// stage-1 look; dragging a corner re-renders live at every size.
 double clockScale(int w, int h) => (w / 4 * h).clamp(0.55, 1.7);
 
-/// Zone height for a widget of [h] rows. h=1 → 112 px ≈ the stage-1 hero.
 double widgetZoneHeight(int h) => 64.0 + h * 48;
 
-/// The placed widget itself. Selection chrome (dashed outline + handles)
-/// is drawn by the edit-mode layer, never here.
 class PlacedWidgetView extends ConsumerWidget {
   const PlacedWidgetView({super.key, required this.widget, this.memory});
 
@@ -55,10 +41,6 @@ class PlacedWidgetView extends ConsumerWidget {
     }
   }
 }
-
-// ---------------------------------------------------------------------------
-// Caveat clock — "the clock re-renders live at each size"
-// ---------------------------------------------------------------------------
 
 class ClockWidgetView extends ConsumerWidget {
   const ClockWidgetView({
@@ -97,8 +79,6 @@ class ClockWidgetView extends ConsumerWidget {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // CLOCK — the same four faces as the hero, scaled by
-                      // span ("the clock re-renders live at each size").
                       HeroClockFace(
                         now: now,
                         style: settings.clockStyle,
@@ -150,7 +130,6 @@ class ClockWidgetView extends ConsumerWidget {
                         height: 1.5,
                       ),
                     ),
-                    // The pond battery pill — taps open the drain page.
                     if (battery.level >= 0) ...[
                       const SizedBox(height: 3),
                       GestureDetector(
@@ -195,10 +174,6 @@ class ClockWidgetView extends ConsumerWidget {
     );
   }
 }
-
-// ---------------------------------------------------------------------------
-// Memories strip — the featured toadGALLERY widget
-// ---------------------------------------------------------------------------
 
 class MemoriesWidgetView extends StatelessWidget {
   const MemoriesWidgetView({super.key, required this.memory, required this.h});
@@ -291,10 +266,6 @@ class MemoriesWidgetView extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Month calendar — local events only, real grid for the current month
-// ---------------------------------------------------------------------------
-
 class CalendarWidgetView extends StatelessWidget {
   const CalendarWidgetView({super.key, required this.now, required this.h});
 
@@ -323,7 +294,7 @@ class CalendarWidgetView extends StatelessWidget {
 
     final first = DateTime(now.year, now.month, 1);
     final daysInMonth = DateTime(now.year, now.month + 1, 0).day;
-    final leadingBlanks = first.weekday - 1; // Monday-first
+    final leadingBlanks = first.weekday - 1;
 
     return SizedBox(
       height: widgetZoneHeight(h),
@@ -403,12 +374,6 @@ class CalendarWidgetView extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Sticky note — a live toadLIST view (Patrick Hand on paper). The old
-// static "buy milk…" scribble is gone: the note now shows the real open
-// flies with their notes count, and nothing when the list is empty.
-// ---------------------------------------------------------------------------
-
 class StickyWidgetView extends ConsumerWidget {
   const StickyWidgetView({super.key, required this.h});
 
@@ -468,7 +433,6 @@ class StickyWidgetView extends ConsumerWidget {
                 ),
               ),
             ),
-            // Tape strip — the sketchbook touch.
             Container(
               width: 56,
               height: 14,

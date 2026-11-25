@@ -1,10 +1,3 @@
-/// App drawer — screen 4 of the proposal ("A–Z + search").
-///
-/// Opens over the home as a frosted-paper sheet (22 px blur + paper wash).
-/// The search pill is sticky on top, the recents row holds the last four
-/// launches, and the alphabetical index uses Caveat section letters with
-/// Patrick Hand rows. Typing filters instantly; swipe-down on the header,
-/// back, or Esc closes. Local index only — nothing leaves the device.
 library;
 
 import 'dart:ui' show ImageFilter;
@@ -25,8 +18,6 @@ import '../todo/todo_store.dart' show todoListProvider;
 class AppDrawer extends ConsumerStatefulWidget {
   const AppDrawer({super.key, this.startWithSearch = false});
 
-  /// Dock-area swipe-down opens the drawer with search focused instead of
-  /// the notification shade (opt-in switch).
   final bool startWithSearch;
 
   @override
@@ -45,7 +36,7 @@ class _AppDrawerState extends ConsumerState<AppDrawer>
     super.initState();
     _entrance = AnimationController(
       vsync: this,
-      duration: ToadMotion.sharedAxisFolderOpen, // 240 ms, shared-axis family
+      duration: ToadMotion.sharedAxisFolderOpen,
     )..forward();
     _search.addListener(() {
       if (_query != _search.text) setState(() => _query = _search.text);
@@ -65,7 +56,6 @@ class _AppDrawerState extends ConsumerState<AppDrawer>
     super.dispose();
   }
 
-  /// Play the exit, then tell the host to unmount.
   void _close() {
     if (!_entrance.isCompleted) return;
     _entrance.reverse().then((_) {
@@ -88,7 +78,6 @@ class _AppDrawerState extends ConsumerState<AppDrawer>
 
     final settings = ref.watch(launcherSettingsProvider);
 
-    // Exact drawer-wash values per skin (CSS .drawer-bg).
     final double washAlpha = switch (skin.skin) {
       ResolvedSkin.light => 0.82,
       ResolvedSkin.pondDay => 0.82,
@@ -166,8 +155,6 @@ class _AppDrawerState extends ConsumerState<AppDrawer>
   }
 }
 
-/// Bridge so drawer rows can raise the host's context menu without
-/// threading callbacks through every widget.
 final StateNotifierProvider<DrawerMenuBridge, DrawerMenuRequest?>
 drawerMenuBridgeProvider =
     StateNotifierProvider<DrawerMenuBridge, DrawerMenuRequest?>(
@@ -192,7 +179,6 @@ class DrawerMenuBridge extends StateNotifier<DrawerMenuRequest?> {
   void consume() => state = null;
 }
 
-/// Search pill + recents + the index itself.
 class _Body extends StatelessWidget {
   const _Body({
     required this.layout,
@@ -225,7 +211,6 @@ class _Body extends StatelessWidget {
     return Column(
       children: [
         const SizedBox(height: 24),
-        // Header zone: swipe down here closes the drawer.
         GestureDetector(
           behavior: HitTestBehavior.opaque,
           onVerticalDragEnd: (details) {
@@ -253,8 +238,6 @@ class _Body extends StatelessWidget {
               ? _SearchResults(query: query, apps: layout.allApps)
               : Column(
                   children: [
-                    // The launcher's own list, pinned above the index —
-                    // a native page, not an app.
                     const _TodoListRow(),
                     Expanded(child: _AzIndex(
                       apps: layout.allApps,
@@ -270,7 +253,6 @@ class _Body extends StatelessWidget {
   }
 }
 
-/// Pinned toadLIST row — the launcher-native todo page with comments.
 class _TodoListRow extends ConsumerWidget {
   const _TodoListRow();
 
@@ -347,7 +329,6 @@ class _TodoListRow extends ConsumerWidget {
   }
 }
 
-/// ⌕ Search apps — sticky pill, Patrick Hand 15.
 class _SearchPill extends StatelessWidget {
   const _SearchPill({
     required this.controller,
@@ -402,7 +383,6 @@ class _SearchPill extends StatelessWidget {
   }
 }
 
-/// Recents — last 4 launched, 44 px icons, hand-jump back into them.
 class _RecentsRow extends StatelessWidget {
   const _RecentsRow({required this.recents});
 
@@ -464,7 +444,6 @@ class _RecentTile extends StatelessWidget {
   }
 }
 
-/// The A–Z index: Caveat letters as section headers.
 class _AzIndex extends StatelessWidget {
   const _AzIndex({required this.apps, required this.showBadges});
 
@@ -473,8 +452,6 @@ class _AzIndex extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // The family gets its own pinned section at the top — Caveat header,
-    // toad-face tiles — and is skipped by the A–Z rows (no duplicates).
     final family = apps.where((a) => a.isFamilyToad).toList();
     final rest = apps.where((a) => !a.isFamilyToad).toList();
 
@@ -505,8 +482,6 @@ class _AzIndex extends StatelessWidget {
   }
 }
 
-/// Pinned section header for the toad family apps (device mode surfaces
-/// the real siblings; demo keeps toadGALLERY + toadPLAYER).
 class _FamilyHeader extends StatelessWidget {
   const _FamilyHeader();
 
@@ -527,7 +502,6 @@ class _FamilyHeader extends StatelessWidget {
   }
 }
 
-/// Hairline between the family block and the A–Z index.
 class _FamilyDivider extends StatelessWidget {
   const _FamilyDivider();
 
@@ -615,7 +589,6 @@ class _AzRow extends StatelessWidget {
   }
 }
 
-/// Local-state-only badge (missed calls, updates) — accent wash pill.
 class _BadgePill extends StatelessWidget {
   const _BadgePill({required this.text});
 
@@ -642,7 +615,6 @@ class _BadgePill extends StatelessWidget {
   }
 }
 
-/// Flat, letter-less results list while searching.
 class _SearchResults extends StatelessWidget {
   const _SearchResults({required this.query, required this.apps});
 
@@ -690,7 +662,6 @@ class _SearchResults extends StatelessWidget {
   }
 }
 
-/// The drawer mockup keeps a single dot under the index (page 1 of 1).
 class PageDotsMini extends StatelessWidget {
   const PageDotsMini({super.key});
 
@@ -713,8 +684,6 @@ class PageDotsMini extends StatelessWidget {
   }
 }
 
-/// Launch/long-press hooks routed without threading callbacks through
-/// every row widget.
 class _DrawerHooks extends InheritedWidget {
   const _DrawerHooks({
     required this.onLaunch,
@@ -726,7 +695,6 @@ class _DrawerHooks extends InheritedWidget {
   final void Function(AppEntry app) onLaunch;
   final void Function(AppEntry app, Offset anchor) onAppLongPress;
 
-  /// Settings › Notifications › badges — hides the written counts live.
   final bool showBadges;
 
   static _DrawerHooks? of(BuildContext context) =>

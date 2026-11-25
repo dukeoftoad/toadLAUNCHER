@@ -1,14 +1,3 @@
-/// The pond wears four faces — CLOCK work (roadmap §6 “hero clock styles”).
-///
-/// One file holds every clock face + the pure formatting helpers so the
-/// hero zone and the placed clock widget share exactly the same code:
-///   hand   — the original Caveat lettering (default, stage-1 look)
-///   analog — a hand-drawn dial (CustomPainter, palette-aware)
-///   word   — “twenty to eleven” phrasing (rounds to the nearest five)
-///   flip   — flip-card digits (AnimatedSwitcher, calm motion)
-///
-/// Hour format is a setting (system / 12 h / 24 h — PLT-13). Pure helpers
-/// live at the top; widgets below. Everything here is offline and local.
 library;
 
 import 'dart:math' as math;
@@ -18,10 +7,6 @@ import 'package:material_ui/material_ui.dart';
 import '../../core/settings/launcher_settings.dart';
 import '../../core/theme/toad_theme.dart';
 import '../../core/theme/toad_tokens.dart';
-
-// ---------------------------------------------------------------------------
-// Pure formatting — unit-testable, no widgets.
-// ---------------------------------------------------------------------------
 
 const List<String> _hourWords = [
   'twelve',
@@ -38,8 +23,6 @@ const List<String> _hourWords = [
   'eleven',
 ];
 
-/// Digital time for the chosen format. `system24` is the platform truth
-/// (MediaQuery.alwaysUse24HourFormat) resolved by the caller.
 String formatClockTime(DateTime now, ClockHourFormat format, bool system24) {
   final use24 = switch (format) {
     ClockHourFormat.system => system24,
@@ -55,12 +38,7 @@ String formatClockTime(DateTime now, ClockHourFormat format, bool system24) {
       '${now.hour < 12 ? 'am' : 'pm'}';
 }
 
-/// The word-clock phrase — “quarter past ten”, “twenty to eleven”. Rounds
-/// to the nearest five minutes the way word clocks do; midnight and noon
-/// are themselves.
 String wordClockPhrase(DateTime now) {
-  // Round to the nearest five (this can roll into the next hour/day —
-  // 23:58 becomes midnight, 11:59 becomes noon).
   final rounded = DateTime(now.year, now.month, now.day, now.hour)
       .add(Duration(minutes: (now.minute / 5).round() * 5));
   if (rounded.hour == 0 && rounded.minute == 0) return 'midnight';
@@ -97,19 +75,12 @@ String wordClockPhrase(DateTime now) {
   return nextHour ? '$word to $displayHour' : '$word past $displayHour';
 }
 
-/// Digits split for the flip cards (“10”, “42”).
 (String, String) flipClockParts(DateTime now, ClockHourFormat format) {
   final text = formatClockTime(now, format, true);
   final parts = text.split(':');
   return (parts.first, parts.last);
 }
 
-// ---------------------------------------------------------------------------
-// The faces.
-// ---------------------------------------------------------------------------
-
-/// The big time text in the active style. Used by both the hero zone and
-/// the placed clock widget (same engine, same look).
 class HeroClockFace extends StatelessWidget {
   const HeroClockFace({
     super.key,
@@ -126,8 +97,6 @@ class HeroClockFace extends StatelessWidget {
   final ClockHourFormat format;
   final bool system24;
 
-  /// Base font/painter size; the hero passes the token, the placed widget
-  /// scales it by span.
   final double? size;
   final Color? color;
 
@@ -173,8 +142,6 @@ class HeroClockFace extends StatelessWidget {
   }
 }
 
-/// A hand-drawn analog dial — ticks like ink strokes, a toad-accent hour
-/// hand, no second hand (the pond is calm; minute precision is the truth).
 class AnalogClockFace extends StatelessWidget {
   const AnalogClockFace({
     super.key,
@@ -214,8 +181,6 @@ class _AnalogClockPainter extends CustomPainter {
     final radius = canvasSize.shortestSide / 2;
     final paint = Paint()..style = PaintingStyle.stroke;
 
-    // Dial: paper disc with a hand-drawn hairline rim (double stroke,
-    // slightly offset — the sketchbook wobble).
     paint.color = face.hairline;
     paint.strokeWidth = radius * 0.035;
     canvas.drawCircle(center, radius * 0.96, paint);
@@ -225,7 +190,6 @@ class _AnalogClockPainter extends CustomPainter {
       paint..strokeWidth = radius * 0.015,
     );
 
-    // Ticks: 12 ink strokes; the quarters are longer and heavier.
     for (var i = 0; i < 12; i++) {
       final angle = i * math.pi / 6 - math.pi / 2;
       final isQuarter = i % 3 == 0;
@@ -241,7 +205,6 @@ class _AnalogClockPainter extends CustomPainter {
       );
     }
 
-    // Hour hand — the toad accent, short and confident.
     final hourAngle =
         (face.now.hour % 12 + face.now.minute / 60) * math.pi / 6 -
         math.pi / 2;
@@ -256,7 +219,6 @@ class _AnalogClockPainter extends CustomPainter {
       paint,
     );
 
-    // Minute hand — ink, long and light.
     final minuteAngle = face.now.minute * math.pi / 30 - math.pi / 2;
     paint.color = face.ink;
     paint.strokeWidth = radius * 0.04;
@@ -269,7 +231,6 @@ class _AnalogClockPainter extends CustomPainter {
       paint,
     );
 
-    // Center dot.
     canvas.drawCircle(center, radius * 0.05, Paint()..color = face.accent);
   }
 
@@ -278,8 +239,6 @@ class _AnalogClockPainter extends CustomPainter {
       oldDelegate.face.now != face.now || oldDelegate.face.ink != face.ink;
 }
 
-/// Flip cards — one card per digit pair, paper surfaces, hairline split,
-/// calm crossfade+slide when the digits change.
 class FlipClockFace extends StatelessWidget {
   const FlipClockFace({
     super.key,
@@ -358,7 +317,6 @@ class _FlipCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(height * 0.14),
         child: Stack(
           children: [
-            // The flip split across the middle.
             Align(
               alignment: Alignment.center,
               child: Container(height: 1, color: hairline),

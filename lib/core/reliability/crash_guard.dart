@@ -1,20 +1,3 @@
-/// REL-01 — crash-loop protection for a Home app.
-///
-/// A launcher that crashes on start is the user's entire phone UI, so the
-/// pond keeps a small, local, honest crash ledger:
-///
-///   · every uncaught Flutter/zone/platform error is recorded with a
-///     timestamp and the boot id of the process it happened in
-///   ///   · at startup, if the last 5 minutes hold crashes from ≥ 3 distinct
-///     boots, the launcher starts in SAFE MODE (own minimal UI: pond off,
-///     no platform-view widgets, plain app grid — the phone stays usable)
-///   · safe mode offers: try again · reset layout · share the crash log ·
-///     choose another Home — recovery without adb
-///
-/// Everything stays on-device (the no-network promise covers crashes too:
-/// nothing is ever uploaded). The ledger lives in SharedPreferences —
-/// always available, no async file dance at crash time. The shareable
-/// crash-log FILE is written on demand from the ledger.
 library;
 
 import 'dart:convert';
@@ -25,7 +8,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../device/device_bridge.dart';
 
-/// Pure decision logic — unit-testable without a device.
 @visibleForTesting
 bool shouldEnterSafeMode(List<CrashEntry> entries, DateTime now) {
   final windowStart =
@@ -68,15 +50,11 @@ class CrashEntry {
 class CrashGuard {
   static const String _kLedgerKey = 'toadlauncher.crashlog.v1';
 
-  /// Crashes from ≥ 3 distinct boots inside the window = safe mode.
   static const int kDistinctBoots = 3;
   static const Duration kWindow = Duration(minutes: 5);
 
-  /// Ledger cap — the pond remembers, but not forever.
   static const int kMaxEntries = 50;
 
-  /// Identifies this process run (crashes from one boot that recovers are
-  /// not a crash LOOP; a loop restarts the process).
   static final String bootId =
       DateTime.now().microsecondsSinceEpoch.toRadixString(36);
 
@@ -103,11 +81,9 @@ class CrashGuard {
         jsonEncode([for (final e in entries) e.toJson()]),
       );
     } catch (_) {
-      // The ledger is best-effort; a crash while crashing is not fixable.
     }
   }
 
-  /// Record one uncaught error (bounded: message + stack head, no payloads).
   static Future<void> record(String kind, Object error, StackTrace? stack) async {
     final buffer = StringBuffer('$error');
     if (stack != null) {
@@ -129,13 +105,11 @@ class CrashGuard {
         : entries);
   }
 
-  /// The startup verdict: true → open in safe mode.
   static Future<bool> verdict() async {
     final entries = await _read();
     return shouldEnterSafeMode(entries, DateTime.now());
   }
 
-  /// "Try again" — clear the ledger and re-run the normal launcher.
   static Future<void> clear() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -143,7 +117,6 @@ class CrashGuard {
     } catch (_) {}
   }
 
-  /// The ledger as a readable text log (what safe mode shares).
   static Future<String> ledgerText() async {
     final entries = await _read();
     if (entries.isEmpty) return 'no crashes recorded';
@@ -158,13 +131,9 @@ class CrashGuard {
     return buffer.toString();
   }
 
-  /// Write the ledger to the app-private files dir and return the path —
-  /// safe mode shares THIS file through the system sheet (user-chosen
-  /// target; the file never leaves the phone on its own).
   static Future<String?> exportLogFile() async {
     try {
       final bridge = DeviceBridge();
-      // Only the real channel can answer; tests/desktop get null.
       final dir = await bridge.appFilesDir();
       if (dir == null) return null;
       final file = File('$dir/crash-log.txt');
@@ -175,9 +144,6 @@ class CrashGuard {
     }
   }
 
-  // -- install points -------------------------------------------------------
-
-  /// Wire every Dart-level error stream into the ledger.
   static void install() {
     FlutterError.onError = (details) {
       FlutterError.presentError(details);

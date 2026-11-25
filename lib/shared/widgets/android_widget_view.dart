@@ -1,11 +1,3 @@
-/// The real-widget renderer — v0.11's answer to "a clock drawn inside
-/// Flutter is not the same as hosting a genuine Android home-screen
-/// widget".
-///
-/// Wraps [PlatformViewLink] + hybrid composition so the actual
-/// AppWidgetHostView (inflated by MainActivity's `toad-widget-host`
-/// factory) is embedded in the Flutter tree, live-updating and
-/// touch-reactive exactly like a stock launcher's widget.
 library;
 
 import 'package:flutter/foundation.dart';
@@ -23,7 +15,6 @@ import 'placed_widgets.dart' show widgetZoneHeight;
 
 const String kToadWidgetViewType = 'toad-widget-host';
 
-/// One hosted Android widget — a genuine AppWidgetHostView.
 class AndroidHostedWidgetView extends StatefulWidget {
   const AndroidHostedWidgetView({super.key, required this.widget});
 
@@ -43,9 +34,6 @@ class _AndroidHostedWidgetViewState extends State<AndroidHostedWidgetView> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        // PLT-07 — tell the real AppWidgetHostView its new size (dp) so
-        // responsive widgets re-render. Reported once per change, after
-        // layout: options updates are not free.
         WidgetsBinding.instance.addPostFrameCallback(
           (_) => _maybeReportSize(constraints),
         );
@@ -97,7 +85,7 @@ class _AndroidHostedWidgetViewState extends State<AndroidHostedWidgetView> {
     if (last != null &&
         (last.width - size.width).abs() < 4 &&
         (last.height - size.height).abs() < 4) {
-      return; // sub-4dp jitter is noise
+      return;
     }
     _lastReportedSize = size;
     DeviceBridge().resizeHostedWidget(
@@ -108,8 +96,6 @@ class _AndroidHostedWidgetViewState extends State<AndroidHostedWidgetView> {
   }
 }
 
-/// Placeholder card for the picker / tests / non-Android surfaces — the
-/// honest frame that says what would be hosted here.
 class HostedWidgetPlaceholder extends StatelessWidget {
   const HostedWidgetPlaceholder({
     super.key,

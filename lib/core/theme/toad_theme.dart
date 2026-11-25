@@ -1,9 +1,3 @@
-/// toadLAUNCHER theme engine — typography and the [ToadTheme] scope.
-///
-/// The four approved looks are expressed as skins over one token set:
-/// Light Sketchbook / Dark Night sketchbook / AMOLED / Pond Pro (day+night).
-/// Pond Pro is a scene skin: it overrides wallpaper + accent visuals and
-/// follows the clock (sunset/sunrise anchors), never location.
 library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,18 +10,11 @@ import 'toad_tokens.dart';
 
 export 'skins.dart';
 
-/// Typography helpers. Fonts are bundled TTFs (offline-first — no
-/// google_fonts runtime fetch).
-///
-/// Caveat ships as a variable font: weight is driven by the `wght` axis via
-/// [FontVariation]. Inter ships as a variable font with `opsz` and `wght`.
 abstract final class ToadType {
   static const String fontCaveat = 'Caveat';
   static const String fontHand = 'Patrick Hand';
   static const String fontInter = 'Inter';
 
-  /// Caveat display text (hero clock, card titles, section letters).
-  /// [weight] 400–700 via variable axis.
   static TextStyle caveat(
     double size, {
     Color? color,
@@ -45,7 +32,6 @@ abstract final class ToadType {
     );
   }
 
-  /// Patrick Hand — labels, rows, buttons.
   static TextStyle hand(
     double size, {
     Color? color,
@@ -63,7 +49,6 @@ abstract final class ToadType {
     );
   }
 
-  /// Inter — dense meta text only (11px kickers, badges, statusbar).
   static TextStyle inter(
     double size, {
     Color? color,
@@ -81,12 +66,10 @@ abstract final class ToadType {
     );
   }
 
-  /// Uppercase meta kicker: Inter 11 / +12% tracking.
   static TextStyle kicker(Color color, {double size = 11}) =>
       inter(size, color: color, weight: 600, tracking: size * 0.12);
 }
 
-/// Fully-resolved skin bundle for the current frame.
 @immutable
 class ToadSkinData {
   const ToadSkinData({
@@ -107,8 +90,6 @@ class ToadSkinData {
       skin == ResolvedSkin.pondNight;
 }
 
-/// InheritedWidget carrying the resolved skin. Rebuilt by the root whenever
-/// settings, system brightness, or the clock changes.
 class ToadTheme extends InheritedWidget {
   const ToadTheme({super.key, required this.data, required super.child});
 
@@ -123,8 +104,6 @@ class ToadTheme extends InheritedWidget {
       oldWidget.data.palette != data.palette;
 }
 
-/// Root helper that resolves the skin from Riverpod settings and provides
-/// both [ToadTheme] and the Material theme.
 class ToadThemeScope extends ConsumerWidget {
   const ToadThemeScope({super.key, required this.child});
 
@@ -145,13 +124,10 @@ class ToadThemeScope extends ConsumerWidget {
       sunsetMinute: settings.sunsetMinute,
       sunriseHour: settings.sunriseHour,
       sunriseMinute: settings.sunriseMinute,
-      // Calm pond — the manual switch OR the drain (low-battery calm):
-      // "night falls instantly" and the loop freezes below.
       pondCalm: ref.watch(pondCalmProvider),
     );
 
     var palette = paletteFor(skin);
-    // Pond Pro owns its accent look; sketchbook skins accept user accents.
     if (!skin.isPond) {
       palette = palette.withAccent(settings.accent.color);
     }

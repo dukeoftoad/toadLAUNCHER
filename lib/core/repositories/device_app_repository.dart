@@ -1,12 +1,3 @@
-/// The Android-backed app index — demo's mirror, wired to the real
-/// package manager through [DeviceBridge].
-///
-///   · index = launchable apps, alphabetically sorted, family-flagged
-///   · home pages = honest auto-layout (family folder leads page 2)
-///   · dock = best-effort known packages, backfilled from the index
-///   · recents = launcher-recorded local history, persisted; upgraded to
-///     system usage stats only when the user opts in (special access)
-///   · launch fires the real intent and records history
 library;
 
 import 'dart:convert';
@@ -22,7 +13,6 @@ import 'app_repository.dart';
 
 const String _kRecentsKey = 'toadlauncher.recents.v1';
 
-/// Common dock candidates — matched by package first, label fallback.
 const List<({String pkg, String labelContains})> _kDockCandidates = [
   (pkg: 'com.google.android.dialer', labelContains: 'phone'),
   (pkg: 'com.samsung.android.dialer', labelContains: 'phone'),
@@ -39,12 +29,8 @@ class DeviceAppRepository implements AppRepository {
 
   final DeviceBridge bridge;
 
-  /// Drawer recents upgrade: system usage stats only when the user both
-  /// opted in in settings AND granted the special access on Android.
   final bool usageOptIn;
 
-  /// Icon PNG bytes by package id — the UI reads this through
-  /// [deviceIconsProvider] after the layout lands.
   final Map<String, Uint8List> iconBytes = {};
 
   List<AppEntry> _allApps = const [];
@@ -82,9 +68,6 @@ class DeviceAppRepository implements AppRepository {
     final all = List<AppEntry>.from(_allApps);
     final familyApps = all.where((a) => a.isFamilyToad).toList();
 
-    // Pages: honest auto-layout — chunks of the index; when two or more
-    // siblings are installed, the family folder leads the second page
-    // (or the first page when the whole index fits on one).
     final perPage = columnsPerRow * 4;
     final pageApps = all.where((a) => !familyApps.contains(a)).toList();
     final pages = <List<HomeCell>>[];
@@ -128,8 +111,6 @@ class DeviceAppRepository implements AppRepository {
     );
   }
 
-  /// Pond rows: the first five apps ride lily pads; the resident keeps
-  /// the last slot of the second row.
   @override
   Future<List<List<AppEntry>>> loadPondRows() async {
     if (_allApps.isEmpty) await loadHomeLayout();
@@ -158,9 +139,6 @@ class DeviceAppRepository implements AppRepository {
   Future<bool> openAppDetails(AppEntry app) =>
       bridge.appDetails(app.packageName ?? app.id);
 
-  // ---------------------------------------------------------------------
-
-  /// Gradient tile index — stable per package so icons don't flicker.
   static int _stableGradient(String packageId) {
     var h = 0;
     for (final c in packageId.codeUnits) {
@@ -169,7 +147,6 @@ class DeviceAppRepository implements AppRepository {
     return h % 8;
   }
 
-  /// Known dock packages first, then fill with whatever is installed.
   List<AppEntry> _dockFrom(List<AppEntry> all) {
     final dock = <AppEntry>[];
     void addByPackage(String pkg) {
@@ -203,8 +180,6 @@ class DeviceAppRepository implements AppRepository {
     return dock.take(4).toList();
   }
 
-  /// Recents: system usage stats when the user opted in AND granted the
-  /// special access; otherwise the launcher's own recorded history.
   Future<List<AppEntry>> _recentsFrom(List<AppEntry> all) async {
     final usage = usageOptIn ? await bridge.usageRecents() : null;
     if (usage != null) {
@@ -231,20 +206,15 @@ class DeviceAppRepository implements AppRepository {
       final next = [id, ...ids.where((e) => e != id)].take(16).toList();
       await prefs.setStringList(_kRecentsKey, next);
     } catch (_) {
-      // History is best-effort; the launch itself already happened.
     }
   }
 }
 
-/// Icon bytes lookups for the UI — kept beside the repo that fills it.
 final StateProvider<Map<String, Uint8List>> deviceIconsProvider =
     StateProvider<Map<String, Uint8List>>((ref) => const {});
 
-/// Convenience: does the installed index contain any family app other
-/// than the launcher itself?
 bool familyInstalledBeyondLauncher(HomeLayout layout) =>
     layout.allApps.any((a) => a.isFamilyToad && a.id != 'family.toad.launcher');
 
-/// JSON helper kept for tests — round-trips a recents list.
 List<String> decodeRecents(String raw) =>
     (jsonDecode(raw) as List<dynamic>).cast<String>();

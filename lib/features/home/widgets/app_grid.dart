@@ -1,6 +1,3 @@
-/// App grid — paged 4-column (5 optional) grid of icons with Patrick Hand
-/// labels and halo shadows. Stage 2: cells can be folder tiles (2x2 mini
-/// preview) and long-press hooks feed the context menu.
 library;
 
 import 'package:material_ui/material_ui.dart';
@@ -31,14 +28,9 @@ class AppGridPageView extends StatelessWidget {
   final void Function(AppEntry app) onAppTap;
   final void Function(AppEntry app, Offset anchor)? onAppLongPress;
 
-  /// Tap on a folder tile — [iconRect] is the tile's global rect, the
-  /// shared-axis open animates from it.
   final void Function(FolderData folder, Rect iconRect)? onFolderTap;
   final void Function(FolderData folder, Offset anchor)? onFolderLongPress;
 
-  /// Stage 3: per-page widget zone rendered above the icon grid (the Caveat
-  /// clock lives here — widgets are per-page objects, exactly as the
-  /// proposal's edit mode shows them).
   final Widget? Function(int pageIndex)? buildPageHeader;
 
   @override
@@ -168,8 +160,6 @@ class _AppCell extends StatelessWidget {
   }
 }
 
-/// Folder tile on the grid: translucent squircle holding the first four
-/// folder apps as a 2x2 mini preview, Patrick Hand label under it.
 class _FolderTile extends StatelessWidget {
   const _FolderTile({
     required this.folder,
@@ -235,7 +225,6 @@ class _FolderTile extends StatelessWidget {
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: () {
-            // Shared-axis origin: the tile's icon area (label excluded).
             final box = cellContext.findRenderObject()! as RenderBox;
             final topLeft = box.localToGlobal(Offset.zero);
             onTap?.call(
@@ -262,7 +251,6 @@ class _FolderTile extends StatelessWidget {
   }
 }
 
-/// 2x2 grid of gradient mini-tiles (the folder's first four apps).
 class _MiniPreview extends StatelessWidget {
   const _MiniPreview({required this.apps, required this.radius});
 
@@ -332,7 +320,6 @@ class _MiniPreview extends StatelessWidget {
   }
 }
 
-/// Elongated-pill page dots (6.5px dots, active = 18px pill).
 class PageDots extends StatelessWidget {
   const PageDots({
     super.key,

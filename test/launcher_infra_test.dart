@@ -1,12 +1,3 @@
-// v0.11 launcher infrastructure — the review's gap list, covered:
-//
-//   · real widget hosting contract (AppWidgetHost channel)
-//   · OS → Dart events: packagesChanged (live index refresh) and
-//     notificationCounts (real dots)
-//   · hosted-widget placement + persistence + cleanup in HomeController
-//   · app shortcuts riding the long-press menu
-//   · the honest-device banner (visible only when a wired bridge fails,
-//     never eating home gestures, dismissable)
 library;
 
 import 'package:flutter/services.dart';
@@ -24,10 +15,6 @@ import 'package:toadlauncher/core/theme/toad_theme.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-
-  // ------------------------------------------------------------------
-  // bridge contract — hosting + system integrations
-  // ------------------------------------------------------------------
 
   group('DeviceBridge v0.11 contract', () {
     const channel = MethodChannel(DeviceBridge.channelName);
@@ -190,10 +177,6 @@ void main() {
     });
   });
 
-  // ------------------------------------------------------------------
-  // HomeController — hosted widget placement, persistence, cleanup
-  // ------------------------------------------------------------------
-
   group('HomeController hosted widgets', () {
     late _RecordingBridge bridge;
     late ProviderContainer container;
@@ -285,17 +268,12 @@ void main() {
         notifier.placeWidget(WidgetKind.calendar, page: 0),
         isTrue,
       );
-      // A second calendar is refused.
       expect(
         notifier.placeWidget(WidgetKind.calendar, page: 1),
         isFalse,
       );
     });
   });
-
-  // ------------------------------------------------------------------
-  // context menu — shortcut rows
-  // ------------------------------------------------------------------
 
   group('MenuActions shortcuts', () {
     testWidgets('shortcut rows render above App info and fire', (tester) async {
@@ -342,7 +320,6 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Shortcuts sit above the fixed rows.
       expect(
         tester.getTopLeft(find.text('New chat')).dy,
         lessThan(tester.getTopLeft(find.text('App info')).dy),
@@ -351,10 +328,6 @@ void main() {
       expect(picked, 'chat');
     });
   });
-
-  // ------------------------------------------------------------------
-  // honest-device banner
-  // ------------------------------------------------------------------
 
   group('DeviceStatusBanner', () {
     testWidgets('shows only when a wired bridge fails to answer',
@@ -379,16 +352,12 @@ void main() {
         await tester.pumpAndSettle(const Duration(seconds: 1));
       }
 
-      // No channel (demo/web/tests): silence — nothing is "answering
-      // wrong", there is simply no phone.
       await pump(wired: false);
       expect(find.textContaining('Android is not answering'), findsNothing);
 
-      // Wired but unanswered: the honest banner explains demo apps.
       await pump(wired: true);
       expect(find.textContaining('Android is not answering'), findsOneWidget);
 
-      // ✕ dismisses for the session.
       await tester.tap(find.text('✕'), warnIfMissed: false);
       await tester.pumpAndSettle();
       expect(find.textContaining('Android is not answering'), findsNothing);
@@ -396,8 +365,6 @@ void main() {
   });
 }
 
-/// DeviceBridge stand-in that reports as wired but never answers —
-/// exactly a phone whose plugin half is broken.
 class _WiredBridge extends DeviceBridge {
   _WiredBridge({required bool wired})
       : super(wired ? const MethodChannel(DeviceBridge.channelName) : null);
@@ -406,8 +373,6 @@ class _WiredBridge extends DeviceBridge {
   Future<bool> available() async => false;
 }
 
-/// Recording bridge for controller tests — demo-honest answers plus a
-/// log of released widget ids.
 class _RecordingBridge extends DeviceBridge {
   _RecordingBridge();
 

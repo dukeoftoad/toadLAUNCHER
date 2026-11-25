@@ -1,12 +1,3 @@
-/// REL-01 — safe mode. When the pond detects a crash loop it opens here
-/// instead of the full launcher: pond off, no platform-view widgets, no
-/// edit mode — just a calm explanation and the four exits:
-///
-///   try again · reset layout · share the crash log · choose another Home
-///
-/// The phone stays usable: a plain app grid (alphabetical, 4 columns,
-/// tap-to-launch) renders from the same device repository. Recovery never
-/// needs adb.
 library;
 
 import 'package:material_ui/material_ui.dart';
@@ -21,8 +12,6 @@ import '../../core/theme/toad_theme.dart';
 import '../../core/theme/toad_tokens.dart';
 import '../home/widgets/hero_zone.dart' show buildHeroData;
 
-/// The safe-mode launcher root — a self-contained MaterialApp (the pond
-/// theme scope still applies, but nothing animated is built).
 class SafeModeApp extends StatelessWidget {
   const SafeModeApp({super.key});
 
@@ -58,15 +47,12 @@ class _SafeModeScreenState extends ConsumerState<SafeModeScreen> {
 
   Future<void> _tryAgain() async {
     await CrashGuard.clear();
-    // Hot-swap back to the normal launcher (same process, fresh ledger).
     runApp(const ToadLauncherApp());
   }
 
   Future<void> _resetLayout() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      // Placements + spans go back to the sketchbook defaults; the app
-      // index itself is untouched (it rebuilds from the repository).
       await prefs.remove('toadlauncher.hosted.widgets.v1');
     } catch (_) {}
     if (mounted) setState(() => _layoutReset = true);
@@ -162,7 +148,6 @@ class _SafeModeScreenState extends ConsumerState<SafeModeScreen> {
                 ],
               ),
             ),
-            // The usable phone: a plain alphabetical grid.
             Expanded(
               child: FutureBuilder(
                 future: apps.loadHomeLayout(columnsPerRow: 4),

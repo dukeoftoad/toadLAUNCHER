@@ -1,11 +1,3 @@
-/// Home screen — sketchbook skins (Light / Dark / AMOLED).
-///
-/// Layout per page: widget zone (Caveat clock + friends) → app grid →
-/// page dots → dock. Stage 3: edit mode (grid skeleton, dashed selection,
-/// resize handles, undoable actions), the widget picker with pick-to-place,
-/// the wallpaper underlay, and the full gesture map — swipe up (drawer),
-/// swipe down (shade demo), pinch (edit), double-tap (sleep demo),
-/// dock-area swipe (search).
 library;
 
 import 'package:flutter/services.dart' show SystemUiOverlayStyle;
@@ -54,24 +46,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   late final PageController _pageController;
   int _pageCount = 3;
 
-  /// Menu raised from the grid / dock / empty space (local to this host).
   MenuRequest? _menu;
 
-  /// Dock-area swipe opens the drawer with search focused.
   bool _drawerWithSearch = false;
 
-  /// Pinch tracking via raw pointers — the scale recognizer loses the
-  /// arena to the page's horizontal drag, so pinch is measured directly
-  /// (distance between the two pointers shrinking past 25%).
   final Map<int, Offset> _pointerPositions = {};
   double? _pinchStartDistance;
   bool _pinchFired = false;
 
-  /// Two-finger screenshot detection (opt-in switch).
   final Set<int> _activePointers = {};
   bool _twoFingerFired = false;
 
-  /// Page-area key — converts placement drops into stack slots.
   final GlobalKey _pageAreaKey = GlobalKey();
 
   @override
@@ -91,10 +76,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     _pageController.dispose();
     super.dispose();
   }
-
-  // ---------------------------------------------------------------------------
-  // Actions
-  // ---------------------------------------------------------------------------
 
   void _launch(AppEntry app) {
     ref.read(homeLayoutProvider.notifier).launch(app);
@@ -156,16 +137,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     showWidgetPicker(context);
   }
 
-  /// Gesture map: "Tap — clock area of hero — open Clock app".
   void _openClockApp() {
     final layout = ref.read(homeLayoutProvider).valueOrNull;
     final clock = layout?.allApps.where((a) => a.id == 'clock').firstOrNull;
     if (clock != null) _launch(clock);
   }
 
-  /// PLT-03 — the two-finger screenshot, finally real: the accessibility
-  /// service's global action (same consent as the lock, API 28+). Honest
-  /// when unavailable: the ask explains, the demo says so.
   Future<void> _takeScreenshot() async {
     final repo = ref.read(appRepositoryProvider);
     if (repo is! DeviceAppRepository) {
@@ -184,7 +161,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  /// Locate a cell by id across the pages (folders included).
   (int, int)? _locateCell(String id) {
     final layout = ref.read(homeLayoutProvider).valueOrNull;
     if (layout == null) return null;
@@ -236,7 +212,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }) {
     final size = MediaQuery.sizeOf(context);
     final effectiveAnchor =
-        anchor ?? Offset(size.width / 2, size.height * 0.82); // dock rows
+        anchor ?? Offset(size.width / 2, size.height * 0.82);
     setState(() {
       _menu = MenuRequest(
         context: variant,
@@ -254,9 +230,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     });
   }
 
-  /// App menus first ask Android for the app's real shortcuts
-  /// (LauncherApps; empty unless we are the default Home), then raise
-  /// the popover with everything wired.
   void _showAppMenu(
     MenuContext variant, {
     Offset? anchor,
@@ -343,7 +316,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       onUninstall: () {
         _dismissMenu();
         if (device && app != null) {
-          repo.uninstallApp(app); // the system dialog is the last word
+          repo.uninstallApp(app);
         } else {
           _toast('Uninstall needs a real device — demo keeps everything');
         }
@@ -392,10 +365,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // Gesture map (screen 11)
-  // ---------------------------------------------------------------------------
-
   void _onScaleEnd(ScaleEndDetails details) {
     if (_overlayBusy) return;
 
@@ -405,11 +374,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     if (!vertical) return;
 
     if (v.dy < -320) {
-      // Swipe up → drawer.
       if (settings.swipeUpDrawer) _openDrawer();
     } else if (v.dy > 320) {
-      // Swipe down → pull the REAL notification shade. When the hidden
-      // status-bar API is unavailable the toast stays honest.
       if (settings.swipeDownNotifications) {
         _pullNotificationShade();
       }
@@ -434,10 +400,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
   }
 
-  /// Double-tap sleep — real on device through the accessibility lock
-  /// service. When the service is off, the app ASKS: one calm dialog
-  /// explaining the smallest-possible footprint, then the exact,
-  /// pre-selected Accessibility entry — never a silent denial.
   void _onDoubleTap() {
     if (_overlayBusy) return;
     final settings = ref.read(launcherSettingsProvider);
@@ -483,7 +445,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     if (!_pointerPositions.containsKey(event.pointer)) return;
     _pointerPositions[event.pointer] = event.position;
 
-    // Pinch in → edit mode: the two-pointer distance shrinks past 25%.
     if (_activePointers.length >= 2 &&
         !_pinchFired &&
         _pinchStartDistance != null &&
@@ -508,10 +469,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     if (_activePointers.isEmpty) _twoFingerFired = false;
   }
 
-  // ---------------------------------------------------------------------------
-  // Pick-to-place
-  // ---------------------------------------------------------------------------
-
   void _placeDropped(DragTargetDetails<WidgetKind> details) {
     final box = _pageAreaKey.currentContext?.findRenderObject() as RenderBox?;
     if (box == null) return;
@@ -521,7 +478,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final page = ref.read(currentPageProvider);
     final layout = ref.read(homeLayoutProvider).valueOrNull;
 
-    // Snap to the nearest stack slot (honest: no invisible offsets).
     var index = 0;
     var acc = 0.0;
     for (final w in layout?.widgetsOnPage(page) ?? const <PlacedWidget>[]) {
@@ -545,10 +501,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Build
-  // ---------------------------------------------------------------------------
-
   @override
   Widget build(BuildContext context) {
     final skin = ToadTheme.of(context);
@@ -564,7 +516,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     final layout = layoutAsync.valueOrNull;
 
-    // Menu raised from inside an overlay (drawer rows, folder grid).
     MenuRequest? bridgeMenu;
     if (drawerMenu != null) {
       bridgeMenu = MenuRequest(
@@ -627,7 +578,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           backgroundColor: palette.paper,
           body: Stack(
             children: [
-              // ---- Base home ----
               WallpaperIndexScope(
                 index: settings.wallpaperIndex,
                 child: SketchbookWallpaper(
@@ -638,9 +588,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       onPointerUp: _onPointerUp,
                       onPointerCancel: _onPointerUp,
                       child: GestureDetector(
-                        // Vertical flings (drawer / shade); pinch is
-                        // raw-pointer based; long-press on empty space
-                        // raises the smaller menu.
                         onScaleEnd: _onScaleEnd,
                         onDoubleTap: _onDoubleTap,
                         onLongPressStart: _overlayBusy
@@ -659,8 +606,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                     if (_pageCount != layout.pages.length) {
                                       _pageCount = layout.pages.length;
                                     }
-                                    // Edit mode paints the honest grid
-                                    // skeleton over the page area.
                                     return CustomPaint(
                                       key: _pageAreaKey,
                                       foregroundPainter: editMode
@@ -762,7 +707,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
               ),
 
-              // ---- Folder (screen 5) ----
               if (folderRequest != null)
                 FolderOverlay(
                   folder:
@@ -772,16 +716,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   startInRename: folderRequest.startInRename,
                 ),
 
-              // ---- Drawer (screen 4) ----
               if (drawerOpen) AppDrawer(startWithSearch: _drawerWithSearch),
 
-              // ---- Device status banner (v0.11: honest defaults) ----
               const DeviceStatusBanner(),
 
-              // ---- Pick-to-place ghost (screen 8) ----
               const PlacementGhost(),
 
-              // ---- Context menu (screen 6) — topmost ----
               if (_menu != null)
                 ContextMenuLayer(request: _menu!, onDismissed: _dismissMenu)
               else if (bridgeMenu != null)
@@ -797,18 +737,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 }
 
-/// Session-only dismissals for the honest-device banners.
 final StateProvider<Set<String>> deviceBannerDismissedProvider =
     StateProvider<Set<String>>((ref) => const {});
 
-/// Two calm, honest, dismissable banners over home (v0.11):
-///
-///  1. device mode on but Android not answering — says WHY demo apps are
-///     showing (v0.10 fell back silently, which read as "broken") and
-///     offers a retry.
-///  2. Android answering but toadLAUNCHER is not the Home app — the
-///     launcher experience (real widgets, shortcuts, pinned widgets)
-///     needs the HOME role; one tap opens the system role dialog.
 class DeviceStatusBanner extends ConsumerWidget {
   const DeviceStatusBanner({super.key});
 
@@ -857,9 +788,6 @@ class DeviceStatusBanner extends ConsumerWidget {
     final dark = skin.isDark;
     final ink = dark ? const Color(0xFFE8E2D4) : palette.ink;
 
-    // Launcher contract: a banner looks, but never eats home gestures.
-    // The paper paints through IgnorePointer; only the pill and ✕ take
-    // pointers (they sit in a Row above the passthrough paper).
     return Positioned(
       left: 14,
       right: 14,
@@ -890,8 +818,6 @@ class DeviceStatusBanner extends ConsumerWidget {
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
-                  // Plain Text absorbs hits in modern Flutter — the
-                  // banner message must never steal home gestures.
                   child: IgnorePointer(
                     child: Text(
                       message,

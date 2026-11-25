@@ -1,9 +1,3 @@
-// v0.10 device layer — bridge contract, family registry, version
-// compare, the device repository, and the update engine state machine.
-//
-// The bridge talks to Android through one MethodChannel; every test here
-// mocks that channel or fakes the bridge, so the whole device layer is
-// exercised without an emulator (CI builds, no device runs).
 library;
 
 import 'package:flutter/services.dart';
@@ -22,10 +16,6 @@ import 'package:toadlauncher/core/settings/launcher_settings.dart'
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  // ------------------------------------------------------------------
-  // toad family registry
-  // ------------------------------------------------------------------
-
   group('toad family registry', () {
     test('recognizes every sibling by its real applicationId', () {
       expect(isToadFamilyPackage('com.toadgallery.app'), isTrue);
@@ -35,8 +25,6 @@ void main() {
       expect(isToadFamilyPackage('dev.toad.toadtimer'), isTrue);
       expect(isToadFamilyPackage('com.toadcalculator'), isTrue);
       expect(isToadFamilyPackage('com.toadlight.filter'), isTrue);
-      // toadNOTES ships as an unrelated-looking id — the explicit list
-      // is the only honest way to know.
       expect(isToadFamilyPackage('com.nestnote.app'), isTrue);
     });
 
@@ -58,10 +46,6 @@ void main() {
     });
   });
 
-  // ------------------------------------------------------------------
-  // version compare (update gate)
-  // ------------------------------------------------------------------
-
   group('compareVersions', () {
     test('newer release wins', () {
       expect(compareVersions('v0.10.0-beta', '0.9.0-beta'), greaterThan(0));
@@ -77,10 +61,6 @@ void main() {
       expect(compareVersions('v0.9.0-beta', '0.10.0-beta'), lessThan(0));
     });
   });
-
-  // ------------------------------------------------------------------
-  // bridge contract over a mocked channel
-  // ------------------------------------------------------------------
 
   group('DeviceBridge channel contract', () {
     const channel = MethodChannel(DeviceBridge.channelName);
@@ -185,10 +165,6 @@ void main() {
     });
   });
 
-  // ------------------------------------------------------------------
-  // device repository — index, family folder, dock, recents
-  // ------------------------------------------------------------------
-
   group('DeviceAppRepository', () {
     late _FakeBridge fake;
 
@@ -202,7 +178,6 @@ void main() {
       final layout = await repo.loadHomeLayout();
 
       expect(layout.allApps.first.name.toLowerCase().codeUnitAt(0), lessThan(0x7b));
-      // Sorted alphabetically (case-insensitive).
       final names = [
         for (final a in layout.allApps) a.name.toLowerCase(),
       ];
@@ -235,8 +210,7 @@ void main() {
 
       final page2 = layout.pages.length >= 2
           ? layout.pages[1]
-          : layout.pages[0]; // a tiny index fits on one page — the folder
-      // then leads the only page it has.
+          : layout.pages[0];
       expect(page2.first, isA<FolderCell>());
       expect((page2.first as FolderCell).folder.id, 'toad-family');
     });
@@ -274,10 +248,6 @@ void main() {
       );
     });
   });
-
-  // ------------------------------------------------------------------
-  // update engine state machine (faked bridge)
-  // ------------------------------------------------------------------
 
   group('UpdateEngine', () {
     late _FakeBridge fake;
@@ -372,7 +342,6 @@ void main() {
 
       await engine.download();
 
-      // First poll tick runs at 500 ms — let it drive the flow.
       await Future<void>.delayed(const Duration(milliseconds: 1300));
 
       expect(fake.enqueuedUrl, 'https://example.com/apk');
@@ -397,15 +366,12 @@ void main() {
       expect(container.read(updateEngineProvider), isA<UpdateChecksumFailed>());
     });
 
-    // -- SEC-02: the signature gate --------------------------------------
-
     test('SEC-02: unsigned release is refused (never banners)', () async {
       fake.release = ReleaseInfo(
         tagName: 'v99.0.0',
         htmlUrl: 'u',
         apkUrl: 'a',
         sha256: 'abc',
-        // no sig — releases without the detached signature are refused
       );
       final engine = container.read(updateEngineProvider.notifier);
       await engine.manualCheck();
@@ -447,18 +413,14 @@ void main() {
       expect((state as UpdateFailed).message, contains('refused'));
     });
 
-    // -- SEC-04: the policy throttle ---------------------------------------
-
     test('SEC-04: policy gates the silent check', () async {
       final engine = container.read(updateEngineProvider.notifier);
       final day = const Duration(days: 1).inMilliseconds;
       final now = 100 * day;
 
-      // off / manual never check silently.
       expect(engine.silentCheckAllowed(UpdatePolicy.off, 0, now), isFalse);
       expect(engine.silentCheckAllowed(UpdatePolicy.manual, 0, now), isFalse);
 
-      // daily: too soon → no; a day passed → yes.
       expect(
         engine.silentCheckAllowed(UpdatePolicy.daily, now - 1000, now),
         isFalse,
@@ -468,7 +430,6 @@ void main() {
         isTrue,
       );
 
-      // weekly: a day is not enough.
       expect(
         engine.silentCheckAllowed(UpdatePolicy.weekly, now - day, now),
         isFalse,
@@ -487,7 +448,7 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt(
         'toadlauncher.update.lastcheck',
-        DateTime.now().millisecondsSinceEpoch - 1000, // checked moments ago
+        DateTime.now().millisecondsSinceEpoch - 1000,
       );
       fake.release = ReleaseInfo(
         tagName: 'v99.0.0',
@@ -498,14 +459,12 @@ void main() {
       );
       final engine = container.read(updateEngineProvider.notifier);
       await engine.silentStartupCheck();
-      // Throttled: nothing happened at all.
       expect(container.read(updateEngineProvider), isA<UpdateIdle>());
       expect(fake.checkCount, 0);
     });
   });
 }
 
-/// Channel-free fake — the update engine and repository talk to this.
 class _FakeBridge extends DeviceBridge {
   _FakeBridge();
 
@@ -535,7 +494,7 @@ class _FakeBridge extends DeviceBridge {
     ),
     DeviceApp(
       packageId: 'com.toadgallery.app',
-      label: 'Gallery', // registry name should override
+      label: 'Gallery',
       iconPng: Uint8List.fromList([9, 9, 9]),
     ),
     const DeviceApp(packageId: 'com.nestnote.app', label: 'Notes'),
@@ -561,9 +520,6 @@ class _FakeBridge extends DeviceBridge {
 
   @override
   Future<bool> verifyUpdateSignature(String message, String signature) async {
-    // The fake mirrors the embedded-key contract: only the fixed test
-    // signature verifies, and only when the fake has not been told to
-    // break it (SEC-02 negative paths).
     return signatureValid && signature == 'valid-signature';
   }
 

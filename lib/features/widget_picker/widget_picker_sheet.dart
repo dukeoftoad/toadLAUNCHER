@@ -1,14 +1,3 @@
-/// Widget picker — screen 8 of the proposal.
-///
-/// "A bottom sheet with live mini-previews. toadGALLERY's Memories widget
-/// is the featured first citizen of the toad family."
-///
-///   · previews are real renders — the same engines as the placed widget
-///   · choosing a widget drops straight into edit mode with the widget
-///     attached: drag it onto home, it snaps to the grid
-///   · the featured Memories card appears only when toadGALLERY is
-///     installed; otherwise the slot quietly explains how to get it
-///   · the sheet supports drag-to-dismiss and follows the drawer's blur
 library;
 
 import 'dart:ui' show ImageFilter;
@@ -24,8 +13,6 @@ import '../../core/theme/toad_theme.dart';
 import '../../core/theme/toad_tokens.dart';
 import '../home/home_controller.dart';
 
-/// Opens the picker sheet. Call from the edit strip, the context menus or
-/// the empty-space menu.
 Future<void> showWidgetPicker(BuildContext context) {
   return showModalBottomSheet<void>(
     context: context,
@@ -81,7 +68,6 @@ class WidgetPickerSheet extends ConsumerWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Grabber — drag-to-dismiss.
                   Container(
                     margin: const EdgeInsets.only(top: 10),
                     width: 40,
@@ -108,7 +94,6 @@ class WidgetPickerSheet extends ConsumerWidget {
                       padding: const EdgeInsets.fromLTRB(12, 4, 12, 14),
                       child: Column(
                         children: [
-                          // Featured — family first, never nagging.
                           _WidgetRow(
                             preview: const _MemoriesPreview(),
                             title: 'toadGALLERY · Memories',
@@ -211,7 +196,6 @@ class WidgetPickerSheet extends ConsumerWidget {
   }
 }
 
-/// One picker row: live preview tile + name + honest size/subtitle.
 class _WidgetRow extends StatelessWidget {
   const _WidgetRow({
     required this.preview,
@@ -295,10 +279,6 @@ class _WidgetRow extends StatelessWidget {
     );
   }
 }
-
-// ---------------------------------------------------------------------------
-// Live previews — scaled-down real renders (never stock images)
-// ---------------------------------------------------------------------------
 
 class _MemoriesPreview extends StatelessWidget {
   const _MemoriesPreview();
@@ -426,9 +406,6 @@ class _StickyPreview extends StatelessWidget {
   }
 }
 
-/// Pick-to-place ghost — "choosing a widget drops the user straight into
-/// edit mode with the widget attached to the finger". The ghost rides at
-/// the bottom; drag it onto home and it snaps into the page's widget stack.
 class PlacementGhost extends ConsumerWidget {
   const PlacementGhost({super.key});
 
@@ -456,12 +433,9 @@ class PlacementGhost extends ConsumerWidget {
               ),
               childWhenDragging: const SizedBox.shrink(),
               onDragCompleted: () {
-                // Dropped on the page's DragTarget — it places the widget.
               },
               onDraggableCanceled: (velocity, offset) {
-                // Released off-target: keep the ghost (still in edit mode).
               },
-              // The grabbable chip — the widget "attached to the finger".
               child: Container(
                 padding: const EdgeInsets.all(7),
                 decoration: BoxDecoration(
@@ -512,7 +486,6 @@ class PlacementGhost extends ConsumerWidget {
   }
 }
 
-/// The dragged chip — a small render of the picked widget's engine.
 class _GhostPreview extends StatelessWidget {
   const _GhostPreview({required this.kind});
 
@@ -546,7 +519,6 @@ class _GhostPreview extends StatelessWidget {
             WidgetKind.memories => const _MemoriesPreview(),
             WidgetKind.calendar => const _CalendarPreview(),
             WidgetKind.sticky => const _StickyPreview(),
-            // Real widgets never ride the ghost — they land instantly.
             WidgetKind.androidHosted => const SizedBox.shrink(),
           },
         ),
@@ -555,10 +527,6 @@ class _GhostPreview extends StatelessWidget {
   }
 }
 
-/// Real home-screen widgets published by installed toad family apps —
-/// discovered through the platform channel; pinning goes through the
-/// system's own confirmation. Hidden entirely when nothing is offered
-/// (or when the channel is not in device mode).
 class _FamilyWidgetsSection extends ConsumerStatefulWidget {
   const _FamilyWidgetsSection();
 
@@ -671,11 +639,6 @@ class _FamilyWidgetsSectionState extends ConsumerState<_FamilyWidgetsSection> {
   }
 }
 
-/// The v0.11 shelf — every real home-screen widget provider on the phone,
-/// listed from the actual AppWidgetManager. "Add" allocates an id from
-/// OUR AppWidgetHost, binds it (Android allows the default Home app to
-/// bind), and lands it straight on the current page. When the launcher
-/// is not yet Home, the row explains exactly that — never a silent lie.
 class _AndroidWidgetsSection extends ConsumerStatefulWidget {
   const _AndroidWidgetsSection();
 

@@ -1,6 +1,3 @@
-/// Stage 4 feature tests — the ambient engine (blink schedule, calm
-/// freeze, rain flag, croak on tap), calm-pond night fall, and the
-/// drag-tracked mouth drawer thresholds (release ≥40% keeps it open).
 library;
 
 import 'dart:convert';
@@ -17,7 +14,7 @@ import 'package:toadlauncher/features/pond/pond_scene_painter.dart';
 import 'package:toadlauncher/features/pond/pond_home.dart';
 import 'package:toadlauncher/features/pond/resident_toad_painter.dart';
 
-final DateTime _noon = DateTime(2026, 11, 24, 12, 0); // broad daylight
+final DateTime _noon = DateTime(2026, 11, 24, 12, 0);
 
 Future<void> pumpPond(WidgetTester tester) async {
   SharedPreferences.setMockInitialValues(<String, Object>{});
@@ -40,13 +37,11 @@ void main() {
     test('blink schedule: blinks at cycle starts, 5–8 s apart', () {
       expect(blinkAt(Duration.zero), isTrue);
       expect(blinkAt(const Duration(seconds: 1)), isFalse);
-      // Cycles stay within the 5–8 s band.
       for (var i = 0; i < 50; i++) {
         final len = blinkCycleLength(i);
         expect(len, greaterThanOrEqualTo(5.0));
         expect(len, lessThanOrEqualTo(8.0));
       }
-      // Two frames only — the 180 ms eyelid swap.
       expect(blinkAt(const Duration(milliseconds: 180)), isFalse);
     });
 
@@ -79,7 +74,6 @@ void main() {
     });
 
     testWidgets('calm pond freezes the clock', (tester) async {
-      // Calm arrives through persisted settings — restored on provider build.
       SharedPreferences.setMockInitialValues(<String, Object>{
         'toadlauncher.settings.v1': jsonEncode(
           const LauncherSettings(calmPond: true).toJson(),
@@ -109,7 +103,7 @@ void main() {
       final frozen = seen;
       await tester.pump(const Duration(milliseconds: 600));
       await tester.pump(const Duration(milliseconds: 600));
-      expect(seen, frozen); // "a still painting — zero animation cost"
+      expect(seen, frozen);
     });
   });
 
@@ -126,9 +120,8 @@ void main() {
         sunriseMinute: 30,
         pondCalm: true,
       );
-      expect(calm, ResolvedSkin.pondNight); // night falls instantly
+      expect(calm, ResolvedSkin.pondNight);
 
-      // Battery guard alone never fakes night in demo — device reads it.
       final guardOnly = resolveSkin(
         mode: SkinMode.system,
         pondPro: true,
@@ -170,10 +163,9 @@ void main() {
     await pumpPond(tester);
 
     await tester.tap(find.text('the resident'));
-    await tester.pump(const Duration(milliseconds: 120)); // anchor tick
-    await tester.pump(const Duration(milliseconds: 120)); // mid-croak
+    await tester.pump(const Duration(milliseconds: 120));
+    await tester.pump(const Duration(milliseconds: 120));
 
-    // The croak drives the painter mid-throat-puff.
     final painters = tester.widgetList<CustomPaint>(
       find.byWidgetPredicate(
         (w) => w is CustomPaint && w.painter is ResidentToadPainter,
@@ -191,20 +183,17 @@ void main() {
     await pumpPond(tester);
 
     await tester.tap(find.text('APPS'));
-    await tester.pump(const Duration(milliseconds: 500)); // mount
-    await tester.pump(const Duration(milliseconds: 380)); // anchor
-    await tester.pump(const Duration(milliseconds: 380)); // wide open
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 380));
+    await tester.pump(const Duration(milliseconds: 380));
     expect(find.text('what fly do you seek?'), findsOneWidget);
 
-    // Drag partway down (≈180 px of the 55%-height track) → openness ≈ 0.55
-    // → above the 40% threshold → the mouth stays seated.
     await tester.dragFrom(const Offset(60, 80), const Offset(0, 180));
     await tester.pump(const Duration(milliseconds: 100));
     await tester.pump(const Duration(milliseconds: 380));
     expect(find.byType(MouthDrawer), findsOneWidget);
     expect(find.text('what fly do you seek?'), findsOneWidget);
 
-    // Now drag the rest of the way — release below 40% → swallow.
     await tester.dragFrom(const Offset(60, 80), const Offset(0, 400));
     await tester.pump(const Duration(milliseconds: 100));
     await tester.pump(const Duration(milliseconds: 260));

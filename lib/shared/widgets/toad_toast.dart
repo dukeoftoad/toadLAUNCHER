@@ -1,8 +1,3 @@
-/// Demo toast — sketchbook-card styled snackbar used by both homes.
-///
-/// Demo mode stays honest: launches record recents locally, while
-/// device-only features say so instead of pretending. Edit-mode actions
-/// carry an Undo pill ("every move in a session is undoable").
 library;
 
 import 'package:material_ui/material_ui.dart';

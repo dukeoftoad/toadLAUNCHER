@@ -1,16 +1,3 @@
-/// Wallpaper & style — screen 9 of the proposal.
-///
-/// "One screen to choose the paper, the ink and the stickers: wallpaper,
-/// theme mode, accent color, icon shape."
-///
-///   · wallpaper grid: bundled sketchbook papers (+ an honest slot for user
-///     photos, which arrive with device mode)
-///   · theme mode: Auto / Light / Dark / AMOLED segmented control — mirrors
-///     toadGALLERY's appearance selector
-///   · accent: six sticker colors; switching re-tints highlights, toggles
-///     and badges instantly (live preview)
-///   · icon shape: squircle / circle / rounded-square, applied uniformly
-///   · everything offline; papers ship inside the APK
 library;
 
 import 'package:flutter/services.dart' show SystemUiOverlayStyle;
@@ -50,7 +37,6 @@ class WallpaperStyleScreen extends ConsumerWidget {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
                 children: [
-                  // Header.
                   Row(
                     children: [
                       _BackChip(onTap: () => Navigator.of(context).maybePop()),
@@ -64,7 +50,6 @@ class WallpaperStyleScreen extends ConsumerWidget {
                     ],
                   ),
 
-                  // Paper hero — the current choice, named.
                   Container(
                     margin: const EdgeInsets.only(top: 14, bottom: 14),
                     height: 96,
@@ -84,7 +69,6 @@ class WallpaperStyleScreen extends ConsumerWidget {
                     ),
                   ),
 
-                  // Wallpaper grid — 7 bundled papers + user photos slot.
                   _SectionLabel('Wallpaper', ink),
                   GridView.count(
                     crossAxisCount: 4,
@@ -110,7 +94,6 @@ class WallpaperStyleScreen extends ConsumerWidget {
                     ],
                   ),
 
-                  // Pond Pro — the live skin, opt-in.
                   _SectionLabel('Pond Pro', ink),
                   _GroupCard(
                     palette: palette,
@@ -162,7 +145,6 @@ class WallpaperStyleScreen extends ConsumerWidget {
                     ],
                   ),
 
-                  // Theme mode.
                   _SectionLabel('Theme mode', ink),
                   _Segmented(
                     options: const ['Auto', 'Light', 'Dark', 'AMOLED'],
@@ -184,7 +166,6 @@ class WallpaperStyleScreen extends ConsumerWidget {
                     }),
                   ),
 
-                  // Accent — live re-tint.
                   _SectionLabel('Accent', ink),
                   Row(
                     children: [
@@ -212,7 +193,6 @@ class WallpaperStyleScreen extends ConsumerWidget {
                     ),
                   ),
 
-                  // Icon shape.
                   _SectionLabel('Icon shape', ink),
                   Row(
                     children: [
@@ -261,10 +241,6 @@ class WallpaperStyleScreen extends ConsumerWidget {
     );
   }
 }
-
-// ---------------------------------------------------------------------------
-// Pieces
-// ---------------------------------------------------------------------------
 
 class _BackChip extends StatelessWidget {
   const _BackChip({required this.onTap});
@@ -380,7 +356,6 @@ class _PaperThumb extends StatelessWidget {
           .withValues(alpha: ToadTheme.of(context).palette.ink.a * 0.55);
 }
 
-/// The honest "user photos" slot — bundled papers only in demo mode.
 class _PhotosTile extends StatelessWidget {
   const _PhotosTile({required this.ink, required this.hairline});
 
@@ -512,7 +487,6 @@ class _SwitchRow extends StatelessWidget {
   }
 }
 
-/// The sketchbook switch — re-tints with the chosen accent ("live apply").
 class ToadSwitch extends StatelessWidget {
   const ToadSwitch({
     super.key,
