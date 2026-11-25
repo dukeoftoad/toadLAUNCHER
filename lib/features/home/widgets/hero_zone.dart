@@ -1,10 +1,3 @@
-/// Hero zone — "hero widget first": the clock + Patrick Hand date on the
-/// left, decorative two-line side note on the right. Tapping the clock opens
-/// the Clock app (device mode); the zone is swappable/removable (stage 2).
-///
-/// CLOCK (roadmap §6): the time itself renders through [HeroClockFace] —
-/// hand-lettered Caveat, a drawn analog dial, a word clock, or flip cards —
-/// with a 12/24-hour setting that follows the system by default (PLT-13).
 library;
 
 import 'package:material_ui/material_ui.dart';
@@ -22,13 +15,12 @@ class HeroClockData {
     required this.noteBottom,
   });
 
-  final String time; // "10:42" (24 h canonical; the face formats for display)
-  final String dateLine; // "Sunday · 23 November"
+  final String time;
+  final String dateLine;
   final String noteTop;
   final String noteBottom;
 }
 
-/// Pure formatting so the widget stays dumb and testable.
 HeroClockData buildHeroData(
   DateTime now, {
   required bool pond,
@@ -65,7 +57,6 @@ HeroClockData buildHeroData(
   final dateLine =
       '${weekdays[now.weekday - 1]} · ${now.day} ${months[now.month - 1]}';
 
-  // Days until the 1st of the next month ("3 days to December").
   final nextMonth = DateTime(now.year, now.month + 1, 1);
   final daysTo = nextMonth
       .difference(DateTime(now.year, now.month, now.day))
@@ -127,21 +118,15 @@ class HeroZone extends StatelessWidget {
 
   final HeroClockData data;
 
-  /// The live tick — the face needs it directly (analog hands, flip cards).
   final DateTime now;
 
-  /// CLOCK: which face the hero wears (Settings → Home screen, live-applied).
   final HeroClockStyle style;
 
-  /// CLOCK: 12/24-hour setting; `system24` carries the platform truth.
   final ClockHourFormat hourFormat;
   final bool system24;
 
-  /// The pond battery pill — one honest line from the drain monitor
-  /// ("battery 76% · −6.2%/h"). Null renders nothing (unknown/hidden).
   final String? batteryLine;
 
-  /// Tapping the pill opens Settings → Battery (the drain page).
   final VoidCallback? onBatteryTap;
 
   @override
@@ -157,7 +142,6 @@ class HeroZone extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // The clock itself — one of four faces, token-sized.
                 Align(
                   alignment: Alignment.centerLeft,
                   child: FittedBox(

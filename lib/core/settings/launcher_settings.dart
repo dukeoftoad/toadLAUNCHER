@@ -1,8 +1,3 @@
-/// toadLAUNCHER settings — Riverpod state with persistence.
-///
-/// Every value maps 1:1 to a switch/row in the design proposal:
-/// Gestures sub-page, Wallpaper & style, Home screen, Dock & drawer,
-/// Notifications, Privacy.
 library;
 
 import 'dart:async';
@@ -15,10 +10,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/skins.dart';
 import '../theme/toad_tokens.dart';
 
-/// Accent options from Wallpaper & style (screen 9).
 enum AccentOption { toad, clay, steel, plum, gold, ink }
 
-/// Hero clock style — the pond wears four faces (CLOCK work, roadmap §6).
 enum HeroClockStyle { hand, analog, word, flip }
 
 extension HeroClockStyleX on HeroClockStyle {
@@ -30,8 +23,6 @@ extension HeroClockStyleX on HeroClockStyle {
   };
 }
 
-/// Hour format for the hero clock. `system` follows the platform's
-/// 12/24-hour setting (PLT-13).
 enum ClockHourFormat { system, h12, h24 }
 
 extension ClockHourFormatX on ClockHourFormat {
@@ -42,8 +33,6 @@ extension ClockHourFormatX on ClockHourFormat {
   };
 }
 
-/// Update-check policy (SEC-04): the launcher checks at most this often,
-/// through the system download service — never its own network.
 enum UpdatePolicy { off, manual, daily, weekly }
 
 extension UpdatePolicyX on UpdatePolicy {
@@ -54,7 +43,6 @@ extension UpdatePolicyX on UpdatePolicy {
     UpdatePolicy.weekly => 'Once a week',
   };
 
-  /// The minimum gap between two silent checks.
   Duration? get minInterval => switch (this) {
     UpdatePolicy.off => null,
     UpdatePolicy.manual => null,
@@ -63,8 +51,6 @@ extension UpdatePolicyX on UpdatePolicy {
   };
 }
 
-/// Bundled sketchbook papers (screen 9 wallpaper grid).
-/// Papers ship inside the APK to honor the no-network promise.
 extension WallpaperX on int {
   String get wallpaperLabel => switch (this) {
     0 => 'Sage',
@@ -90,7 +76,6 @@ extension AccentOptionX on AccentOption {
   };
 }
 
-/// The full settings model. Immutable; patch via [LauncherSettingsController].
 @immutable
 class LauncherSettings {
   const LauncherSettings({
@@ -131,95 +116,58 @@ class LauncherSettings {
     this.clockHourFormat = ClockHourFormat.system,
   });
 
-  // Wallpaper & style.
   final SkinMode skinMode;
   final bool pondPro;
   final AccentOption accent;
   final IconShape iconShape;
 
-  // Home screen.
-  final int gridColumns; // 4 default, 5 optional
-  final bool showMemoriesCard; // hero widget removable
+  final int gridColumns;
+  final bool showMemoriesCard;
 
-  // Gestures sub-page.
   final bool swipeUpDrawer;
-  final bool doubleTapSleep; // ON per mockup
+  final bool doubleTapSleep;
   final bool swipeDownNotifications;
-  final bool twoFingerScreenshot; // OFF by default
+  final bool twoFingerScreenshot;
   final bool pinchEditMode;
-  final bool dockAreaSwipeSearch; // OFF by default
+  final bool dockAreaSwipeSearch;
 
-  // Notifications.
   final bool notificationDots;
   final bool badges;
 
-  // Pond pack.
-  final bool calmPond; // freezes ambient loop (accessibility)
-  final bool pondRain; // manual weather toggle — never a weather feed
+  final bool calmPond;
+  final bool pondRain;
 
-  /// Battery guard — when battery saver is ACTIVE on device, night falls
-  /// instantly and the loop freezes. The demo never reads a battery, so
-  /// this flag is honored once device mode ships; off never nags.
   final bool batteryGuard;
 
-  // Day/night anchors (clock-driven, never location).
   final int sunsetHour;
   final int sunsetMinute;
   final int sunriseHour;
   final int sunriseMinute;
 
-  // Wallpaper & style additions (stage 3).
-
-  /// Bundled paper index (0..6); user photos arrive with device mode.
   final int wallpaperIndex;
 
-  /// Caveat clock widget span — resizable 2×1 … 4×4 in edit mode;
-  /// "the clock re-renders live at each size".
   final int clockSpanW;
   final int clockSpanH;
 
-  /// The edit-mode hint bubble teaches once, then never again.
   final bool editHintDismissed;
 
-  // Dock & drawer sub-page.
   final bool drawerSearch;
   final bool drawerRecents;
 
-  // Device & updates (v0.10).
-
-  /// Device mode: the index comes from the real package manager. Falls
-  /// back to demo automatically when the channel does not answer.
   final bool deviceMode;
 
-  /// One silent update check per process (GitHub releases via the system
-  /// download service — never our own network permission).
   final bool autoUpdateCheck;
 
-  /// SEC-04: how often the silent startup check may actually run. Daily is
-  /// the honest default — a launcher process restarts constantly, and the
-  /// old "once per process" meant a network request on nearly every
-  /// process start. Manual check stays available in Settings regardless.
   final UpdatePolicy updatePolicy;
 
-  /// Hero clock face (CLOCK): hand-lettered Caveat, a drawn analog dial, a
-  /// word clock, or flip cards.
   final HeroClockStyle clockStyle;
 
-  /// Hero clock hour format (PLT-13): system-following by default.
   final ClockHourFormat clockHourFormat;
 
-  /// Opt-in for system usage stats in the drawer recents row. Off keeps
-  /// the launcher's own recorded history; off never nags.
   final bool usageRecentsOptIn;
 
-  /// The first-run intro shows once, then never again (replayable from
-  /// Settings → About). False until the user walks through it.
   final bool introSeen;
 
-  /// Low-battery calm — when the pond's battery monitor reads ≤ 15 % and
-  /// unplugged, night falls instantly and the ambient loop freezes, exactly
-  /// like Calm-pond but driven by the drain, not the clock. Off never
-  /// interferes.
   final bool lowBatteryCalm;
 
   LauncherSettings copyWith({
@@ -362,9 +310,6 @@ class LauncherSettings {
       sunriseMinute: (json['sunriseMinute'] as int?) ?? 30,
       wallpaperIndex: (json['wallpaperIndex'] as int?) ?? 0,
       clockSpanW: (json['clockSpanW'] as int?) ?? 4,
-      // NEW-05: the restore default must match the constructor default
-      // (1) — a pre-existing drift made restored settings grow the hero
-      // clock to 2 rows while fresh installs kept 1.
       clockSpanH: (json['clockSpanH'] as int?) ?? 1,
       editHintDismissed: (json['editHintDismissed'] as bool?) ?? false,
       drawerSearch: (json['drawerSearch'] as bool?) ?? true,
@@ -383,7 +328,6 @@ class LauncherSettings {
 
 const String _kPrefsKey = 'toadlauncher.settings.v1';
 
-/// Settings controller: loads on init, applies live, persists each patch.
 class LauncherSettingsController extends Notifier<LauncherSettings> {
   @override
   LauncherSettings build() {
@@ -396,24 +340,20 @@ class LauncherSettingsController extends Notifier<LauncherSettings> {
       final prefs = await SharedPreferences.getInstance();
       final raw = prefs.getString(_kPrefsKey);
       if (raw == null || raw.isEmpty) return;
-      // Only apply if user has not already patched during this session.
       if (state != const LauncherSettings()) return;
       state = LauncherSettings.fromJson(
         (jsonDecode(raw) as Map<dynamic, dynamic>).cast<String, Object?>(),
       );
     } catch (_) {
-      // Offline-first promise: settings loss must never crash the launcher.
     }
   }
 
-  /// Replace the whole model and persist. "changes apply live".
   Future<void> patch(LauncherSettings next) async {
     state = next;
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_kPrefsKey, jsonEncode(next.toJson()));
     } catch (_) {
-      // Persistence is best-effort; the session keeps running.
     }
   }
 
@@ -443,7 +383,6 @@ class LauncherSettingsController extends Notifier<LauncherSettings> {
       patch(state.copyWith(notificationDots: v));
   void setBadges(bool v) => patch(state.copyWith(badges: v));
 
-  // Gesture switches — named uniformly for the gestures sub-page.
   void patchSwipeUpDrawer(bool v) => patch(state.copyWith(swipeUpDrawer: v));
   void patchDoubleTapSleep(bool v) => patch(state.copyWith(doubleTapSleep: v));
   void patchSwipeDownNotifications(bool v) =>
@@ -454,34 +393,25 @@ class LauncherSettingsController extends Notifier<LauncherSettings> {
   void patchDockAreaSwipeSearch(bool v) =>
       patch(state.copyWith(dockAreaSwipeSearch: v));
 
-  // Device & updates switches.
   void setDeviceMode(bool v) => patch(state.copyWith(deviceMode: v));
   void setAutoUpdateCheck(bool v) => patch(state.copyWith(autoUpdateCheck: v));
   void setUsageRecentsOptIn(bool v) =>
       patch(state.copyWith(usageRecentsOptIn: v));
 
-  /// SEC-04: how often the silent check may run (manual check always
-  /// available in Settings → Device & updates).
   void setUpdatePolicy(UpdatePolicy p) => patch(state.copyWith(updatePolicy: p));
 
-  // CLOCK — hero clock style + hour format (roadmap §6 “Widgets & home
-  // extras”: hero clock styles + clock format; live-applied, persisted).
   void setClockStyle(HeroClockStyle s) => patch(state.copyWith(clockStyle: s));
   void setClockHourFormat(ClockHourFormat f) =>
       patch(state.copyWith(clockHourFormat: f));
 
-  // v0.12 — intro + battery.
   void setIntroSeen() => patch(state.copyWith(introSeen: true));
 
-  /// Settings → About replays the first-run intro with this.
   void replayIntro() => patch(state.copyWith(introSeen: false));
 
   void setLowBatteryCalm(bool v) =>
       patch(state.copyWith(lowBatteryCalm: v));
 }
 
-/// Ticker for the hero clock and pond day/night anchors.
-/// Emits every 5 seconds — minute-precision UI never lags, cost is nil.
 final StreamProvider<DateTime> clockProvider = StreamProvider<DateTime>((
   ref,
 ) async* {

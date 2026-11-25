@@ -1,32 +1,18 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
-
-    <!--
-      toadLAUNCHER product promise: NO INTERNET permission, ever.
-      Update checks ride the SYSTEM download service (its process holds the
-      network — ours never asks for it).
-      QUERY_ALL_PACKAGES is required to build the local app index (sideload-only app).
-    -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"/>
-    <!-- Wallpaper picker entry (wallpaper & style). -->
     <uses-permission android:name="android.permission.SET_WALLPAPER"/>
-    <!-- Device mode (v0.10): real uninstall through the system dialog. -->
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES"/>
-    <!-- Self-update: hands the downloaded APK to the system installer. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
-    <!-- Opt-in only: system usage stats for the drawer recents row. The
-         special access is granted by the user in Settings; never nagged. -->
     <uses-permission
         android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions"/>
-
     <application
         android:label="toadLAUNCHER"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:enableOnBackInvokedCallback="true">
-
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -37,13 +23,10 @@
             android:hardwareAccelerated="true"
             android:resizeableActivity="true"
             android:windowSoftInputMode="adjustResize">
-
             <meta-data
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
               />
-
-            <!-- Home screen (launcher) role. -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.HOME"/>
@@ -51,15 +34,10 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
                 <category android:name="android.intent.category.MONKEY"/>
             </intent-filter>
-
-            <!-- Wallpaper picker entry point. -->
             <intent-filter>
                 <action android:name="android.service.wallpaper.WallpaperService"/>
             </intent-filter>
         </activity>
-
-        <!-- Screen lock for double-tap-to-sleep (user opt-in in
-             Accessibility settings; performs the lock action only). -->
         <service
             android:name=".ToadLockService"
             android:exported="true"
@@ -72,9 +50,6 @@
                 android:name="android.accessibilityservice"
                 android:resource="@xml/toad_lock_service"/>
         </service>
-
-        <!-- Notification dots (user opt-in via Notification access).
-             Counts only: package + ongoing flag, never message content. -->
         <service
             android:name=".ToadNotificationListener"
             android:exported="true"
@@ -84,14 +59,10 @@
                 <action android:name="android.service.notification.NotificationListenerService"/>
             </intent-filter>
         </service>
-
-        <!-- Don't delete the meta-data below.
-             This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
     </application>
-
     <queries>
         <intent>
             <action android:name="android.intent.action.MAIN"/>

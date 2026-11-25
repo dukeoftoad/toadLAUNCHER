@@ -1,10 +1,3 @@
-/// Long-press context menu — screen 6 of the proposal.
-///
-/// "One long-press surfaces everything an icon can do — always with an
-/// escape, never with a surprise." The popover scales in beside the icon
-/// (180 ms), dismisses on tap-outside or back, and keeps the danger item
-/// isolated behind a second confirm step. Remove never uninstalls: it only
-/// takes an icon off the page it lives on.
 library;
 
 import 'package:material_ui/material_ui.dart';
@@ -13,7 +6,6 @@ import '../../core/models/models.dart';
 import '../../core/theme/toad_theme.dart';
 import '../../core/theme/toad_tokens.dart';
 
-/// Where the menu was raised from — decides the item set.
 enum MenuContext {
   homeApp,
   dockApp,
@@ -24,8 +16,6 @@ enum MenuContext {
   emptySpace,
 }
 
-/// One app shortcut row — the real LauncherApps shortcut list, wired
-/// by the host (default home only; Android enforces it).
 @immutable
 class MenuShortcut {
   const MenuShortcut({required this.label, required this.onPick});
@@ -34,8 +24,6 @@ class MenuShortcut {
   final VoidCallback onPick;
 }
 
-/// Everything a menu row can trigger. The host wires the real behaviour;
-/// the popover stays dumb.
 @immutable
 class MenuActions {
   const MenuActions({
@@ -57,8 +45,6 @@ class MenuActions {
   final VoidCallback onShare;
   final VoidCallback onUninstall;
 
-  /// App shortcuts (long-press quick actions) — rendered above the fixed
-  /// rows, capped at three so the popover stays calm.
   final List<MenuShortcut> shortcuts;
 
   final VoidCallback? onEditHome;
@@ -86,7 +72,6 @@ class MenuRequest {
   final FolderData? folder;
 }
 
-/// One row of the popover.
 @immutable
 class _MenuItem {
   const _MenuItem(this.icon, this.label, this.onPick, {this.danger = false});
@@ -99,7 +84,6 @@ class _MenuItem {
 
 List<_MenuItem> _itemsFor(MenuRequest request) {
   final a = request.actions;
-  // Real app shortcuts ride above the fixed set — max three, calm menu.
   final shortcutRows = [
     for (final s in a.shortcuts.take(3)) _MenuItem('⤴', s.label, s.onPick),
   ];
@@ -156,8 +140,6 @@ List<_MenuItem> _itemsFor(MenuRequest request) {
   }
 }
 
-/// The full-screen layer: a dismiss barrier plus the anchored popover.
-/// Place it last in the home Stack.
 class ContextMenuLayer extends StatefulWidget {
   const ContextMenuLayer({
     super.key,
@@ -167,7 +149,6 @@ class ContextMenuLayer extends StatefulWidget {
 
   final MenuRequest request;
 
-  /// Host clears the pending request after the exit animation.
   final VoidCallback onDismissed;
 
   @override
@@ -184,7 +165,7 @@ class _ContextMenuLayerState extends State<ContextMenuLayer>
     super.initState();
     _entrance = AnimationController(
       vsync: this,
-      duration: ToadMotion.popoverScaleIn, // 180 ms
+      duration: ToadMotion.popoverScaleIn,
     )..forward();
   }
 
@@ -210,8 +191,6 @@ class _ContextMenuLayerState extends State<ContextMenuLayer>
     final items = _itemsFor(widget.request);
     final confirming = _confirmingUninstall && widget.request.app != null;
 
-    // Estimated popover height: padding + per-row pitch (icon chip 26 +
-    // vertical padding 9*2 = ~44 per row, confirm header extra).
     final double estHeight =
         16 + (confirming ? items.length + 1 : items.length) * 44;
 
@@ -231,7 +210,6 @@ class _ContextMenuLayerState extends State<ContextMenuLayer>
     return Positioned.fill(
       child: Stack(
         children: [
-          // Tap-outside dismisses — "never with a surprise".
           GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: _dismiss,
@@ -341,8 +319,6 @@ class _PopoverCard extends StatelessWidget {
                             ? palette.accent.withValues(alpha: 0.14)
                             : palette.accent.withValues(alpha: 0.12)),
                   chipInk: item.danger ? palette.danger : palette.accentInk,
-                  // The danger row never fires directly — it arms the
-                  // second-step confirm ("confirmed with a second step").
                   onTap: item.danger ? onArmConfirm : item.onPick,
                 ),
           ],

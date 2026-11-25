@@ -1,9 +1,3 @@
-/// Bundled sketchbook wallpaper — the chosen paper painted under the glow.
-///
-/// "Everything here is offline; wallpapers ship inside the APK (~2 MB) to
-/// honor the no-network promise." The bundled papers are soft sketchbook
-/// gradients blended over the skin's paper; Pond Pro replaces the whole
-/// underlay with the scene.
 library;
 
 import 'package:material_ui/material_ui.dart';
@@ -19,7 +13,7 @@ class SketchbookWallpaper extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final data = ToadTheme.of(context);
-    if (data.skin.isPond) return child; // the scene owns the stage
+    if (data.skin.isPond) return child;
 
     final palette = data.palette;
     final index = WallpaperIndexScope.of(context);
@@ -31,8 +25,6 @@ class SketchbookWallpaper extends StatelessWidget {
   }
 }
 
-/// Paints the chosen bundled paper as a full-bleed 145° gradient wash over
-/// the skin paper.
 class _PaperPainter extends CustomPainter {
   _PaperPainter({required this.paper, required this.index});
 
@@ -41,7 +33,6 @@ class _PaperPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Paper base first — never transparent (AMOLED keeps true black).
     canvas.drawRect(Offset.zero & size, Paint()..color = paper);
 
     final papers = AppIconGradients.wallpapers;
@@ -66,7 +57,6 @@ class _PaperPainter extends CustomPainter {
         ).createShader(rect),
     );
 
-    // Soft top wash so the hero text keeps its sketchbook calm.
     canvas.drawRect(
       rect,
       Paint()
@@ -86,8 +76,6 @@ class _PaperPainter extends CustomPainter {
       oldDelegate.index != index || oldDelegate.paper != paper;
 }
 
-/// Carries the settings wallpaper index down to the underlay without
-/// rebuilding every ToadTheme consumer.
 class WallpaperIndexScope extends InheritedWidget {
   const WallpaperIndexScope({
     super.key,

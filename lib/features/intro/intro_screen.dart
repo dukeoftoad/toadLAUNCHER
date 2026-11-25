@@ -1,14 +1,3 @@
-/// The first-run intro — "welcome to the pond".
-///
-/// Four paper pages, shown once (Settings → About replays them):
-///   1. what this is — a hand-made home screen, part of the toad family
-///   2. the promise — offline-first, no analytics, no INTERNET permission
-///   3. make it yours — four skins, accents, Pond Pro, widgets, edit mode
-///   4. a real launcher — permissions are asked by the app, updates ride
-///      the system, gestures are yours
-///
-/// The last page hands over to the permissions page — the ask comes
-/// immediately after, not buried three settings deep.
 library;
 
 import 'package:flutter/services.dart' show SystemUiOverlayStyle;
@@ -40,7 +29,6 @@ class _IntroScreenState extends ConsumerState<IntroScreen> {
   void _finish({bool openPermissions = false}) {
     ref.read(launcherSettingsProvider.notifier).setIntroSeen();
     if (openPermissions && mounted) {
-      // The ask happens right away — nothing silently denied on day one.
       Navigator.of(context)
           .push(MaterialPageRoute<void>(
             builder: (_) => const PermissionsPage(),
@@ -71,7 +59,6 @@ class _IntroScreenState extends ConsumerState<IntroScreen> {
         body: SafeArea(
           child: Column(
             children: [
-              // Skip pill, top-right.
               Align(
                 alignment: Alignment.topRight,
                 child: Padding(
@@ -162,7 +149,6 @@ class _IntroScreenState extends ConsumerState<IntroScreen> {
                   ],
                 ),
               ),
-              // Dots + next/finish.
               Padding(
                 padding: const EdgeInsets.fromLTRB(0, 4, 0, 10),
                 child: Row(
@@ -246,7 +232,6 @@ class _IntroScreenState extends ConsumerState<IntroScreen> {
   }
 }
 
-/// One intro page — big glyph chip, Caveat title, Patrick Hand lines.
 class _IntroPage extends StatelessWidget {
   const _IntroPage({
     required this.palette,

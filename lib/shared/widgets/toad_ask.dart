@@ -1,18 +1,3 @@
-/// Ask-by-app permission flow — the anti-silent-denial.
-///
-/// The old flaw: special accesses (Notification listener, Accessibility
-/// lock service, Usage stats, install permission, HOME role) sat behind
-/// buried settings rows, so on a fresh install everything read "denied"
-/// and nothing asked. Fixed with one calm, hand-made dialog:
-///
-///   1. the app explains WHAT it needs and WHY (honest, one paragraph)
-///   2. "grant now" opens the EXACT Android toggle (deep-link, never a
-///      settings scavenger hunt)
-///   3. when the user comes back, the caller re-checks and reports —
-///      nothing pretends it was granted
-///
-/// Every ask is reversible: "not now" closes and the feature keeps
-/// degrading honestly (never nagging twice for the same denial in a row).
 library;
 
 import 'package:flutter/services.dart' show SystemUiOverlayStyle;
@@ -21,8 +6,6 @@ import 'package:material_ui/material_ui.dart';
 import '../../core/theme/toad_theme.dart';
 import '../../core/theme/toad_tokens.dart';
 
-/// One ask: what the app needs, why it is needed, and the deep-link
-/// action that opens the exact system toggle.
 class ToadAsk {
   const ToadAsk({
     required this.icon,
@@ -36,15 +19,10 @@ class ToadAsk {
   final String title;
   final String reason;
 
-  /// Opens the exact Android settings screen; resolves when the screen
-  /// is launched.
   final Future<void> Function() openToggle;
   final String toggleLabel;
 }
 
-/// Shows the calm ask dialog. Resolves `true` when the user chose to
-/// open the toggle (so the caller knows to re-check on return), `false`
-/// when they declined or Android refused to open the screen.
 Future<bool> showToadAsk(BuildContext context, ToadAsk ask) async {
   final palette = ToadTheme.of(context).palette;
   final dark = ToadTheme.of(context).isDark;
@@ -138,12 +116,6 @@ Future<bool> showToadAsk(BuildContext context, ToadAsk ask) async {
   return true;
 }
 
-// ---------------------------------------------------------------------------
-// The five asks — one factory per special access. Keep the copy honest:
-// what is read, what is done, and what the app never does.
-// ---------------------------------------------------------------------------
-
-/// Notification access — feeds the live dots. Reads package names only.
 ToadAsk askNotificationAccess(Future<void> Function() open) => ToadAsk(
   icon: '◔',
   title: 'Notification access',
@@ -157,7 +129,6 @@ ToadAsk askNotificationAccess(Future<void> Function() open) => ToadAsk(
   openToggle: open,
 );
 
-/// Accessibility (lock service) — double-tap-to-sleep's engine.
 ToadAsk askLockService(Future<void> Function() open) => ToadAsk(
   icon: '⌾',
   title: 'Screen lock service',
@@ -171,7 +142,6 @@ ToadAsk askLockService(Future<void> Function() open) => ToadAsk(
   openToggle: open,
 );
 
-/// Usage access — drawer recents from real usage, opt-in.
 ToadAsk askUsageAccess(Future<void> Function() open) => ToadAsk(
   icon: '◷',
   title: 'Usage access',
@@ -184,7 +154,6 @@ ToadAsk askUsageAccess(Future<void> Function() open) => ToadAsk(
   openToggle: open,
 );
 
-/// Install unknown apps — the self-update handoff.
 ToadAsk askInstallPermission(Future<void> Function() open) => ToadAsk(
   icon: '⬒',
   title: 'Install unknown apps',
@@ -197,7 +166,6 @@ ToadAsk askInstallPermission(Future<void> Function() open) => ToadAsk(
   openToggle: open,
 );
 
-/// HOME role — real widgets, shortcuts, shade.
 ToadAsk askDefaultHome(Future<void> Function() open) => ToadAsk(
   icon: '⌂',
   title: 'Make toadLAUNCHER your Home',
@@ -210,10 +178,6 @@ ToadAsk askDefaultHome(Future<void> Function() open) => ToadAsk(
   openToggle: open,
 );
 
-/// PLT-01 — the Restricted Settings pre-step (Android 13+ sideloads).
-/// The toggle deep-links would land on GREYED-OUT switches; this ask
-/// walks the one-time unlock first, then the caller continues to the
-/// real toggle.
 ToadAsk askRestrictedSettings(Future<void> Function() openAppInfo) => ToadAsk(
   icon: '🔒',
   title: 'One-time unlock first',

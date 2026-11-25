@@ -1,4 +1,3 @@
-/// toadLAUNCHER root — theme scope + home routing (pond vs sketchbook).
 library;
 
 import 'dart:async';
@@ -29,8 +28,6 @@ class ToadLauncherApp extends ConsumerWidget {
       title: 'toadLAUNCHER',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(useMaterial3: true, fontFamily: 'Inter'),
-      // The skin scope wraps the navigator so pushed pages (settings hub,
-      // wallpaper & style) and modal sheets share the same tokens.
       builder: (context, child) => ToadThemeScope(
         child: _StartupCheck(
           child: Stack(
@@ -46,7 +43,6 @@ class ToadLauncherApp extends ConsumerWidget {
   }
 }
 
-/// One silent update check per process (toadFILES v1.7.1 behavior).
 class _StartupCheck extends ConsumerStatefulWidget {
   const _StartupCheck({required this.child});
 
@@ -60,7 +56,6 @@ class _StartupCheckState extends ConsumerState<_StartupCheck> {
   Timer? _refreshDebounce;
 
   void _onPackagesChanged(String packageId, String action) {
-    // The index refreshes live when apps install / update / remove.
     _refreshDebounce?.cancel();
     _refreshDebounce = Timer(const Duration(milliseconds: 400), () {
       if (!mounted) return;
@@ -117,8 +112,6 @@ class _StartupCheckState extends ConsumerState<_StartupCheck> {
   Widget build(BuildContext context) => widget.child;
 }
 
-/// Slim, dismissable banner card floating over home when the engine has
-/// something honest to say (update available / downloading / permission).
 class UpdateBannerHost extends ConsumerWidget {
   const UpdateBannerHost({super.key});
 
@@ -232,8 +225,6 @@ class UpdateBannerHost extends ConsumerWidget {
   }
 }
 
-/// First run → the intro; after that, the home. The intro replays from
-/// Settings → About, so "welcome to the pond" is never lost forever.
 class _FirstRunGate extends StatelessWidget {
   const _FirstRunGate({required this.pondPro, required this.introSeen});
 

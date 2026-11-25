@@ -1,13 +1,3 @@
-/// Launcher settings — screen 10 of the proposal.
-///
-/// "The same hub-plus-pages pattern as toadGALLERY's beta.1 settings: a
-/// calm list, honest subtitles, handwriting titles."
-///
-///   · grouped cards, one-line honest subtitles — the value you get is
-///     written out, not hidden behind a tap
-///   · Privacy is a first-class row stating the promise: no analytics, no
-///     network permission, offline-first
-///   · every switch applies live (no save button, no hidden traps)
 library;
 
 import 'package:flutter/services.dart' show SystemUiOverlayStyle;
@@ -29,8 +19,6 @@ import '../wallpaper_style/wallpaper_style_screen.dart'
 import 'battery_page.dart';
 import 'permissions_page.dart';
 
-/// Entry point — pushes the hub. Called from the empty-space menu, the
-/// edit strip and the dock long-press demo paths.
 Future<void> openSettingsHub(BuildContext context) {
   return Navigator.of(context)
       .push(MaterialPageRoute<void>(builder: (_) => const SettingsHub()));
@@ -233,11 +221,6 @@ class SettingsHub extends ConsumerWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Sub-pages
-// ---------------------------------------------------------------------------
-
-/// Home screen — grid density and the hero extras.
 class HomeScreenSettingsPage extends ConsumerWidget {
   const HomeScreenSettingsPage({super.key});
 
@@ -332,7 +315,6 @@ class HomeScreenSettingsPage extends ConsumerWidget {
   }
 }
 
-/// Dock & drawer — what the drawer shows.
 class DockDrawerSettingsPage extends ConsumerWidget {
   const DockDrawerSettingsPage({super.key});
 
@@ -389,8 +371,6 @@ class DockDrawerSettingsPage extends ConsumerWidget {
   }
 }
 
-/// Gestures — screen 10's sub-page: "every gesture is a switch with a
-/// one-line effect description".
 class GesturesSettingsPage extends ConsumerWidget {
   const GesturesSettingsPage({super.key});
 
@@ -486,9 +466,6 @@ class GesturesSettingsPage extends ConsumerWidget {
   }
 }
 
-/// Notifications — dots and badges, honest about demo scope.
-/// Turning dots/badges on ASKS for Notification access when it is not
-/// granted yet — the app asks, the user decides, nothing stays silent.
 class NotificationsSettingsPage extends ConsumerWidget {
   const NotificationsSettingsPage({super.key});
 
@@ -565,8 +542,6 @@ class NotificationsSettingsPage extends ConsumerWidget {
   }
 }
 
-/// Notification access — the one special access the dots service needs.
-/// The counts service reads package names only, never message content.
 class _NotificationAccessRow extends ConsumerWidget {
   const _NotificationAccessRow();
 
@@ -640,7 +615,6 @@ class _NotificationAccessRow extends ConsumerWidget {
   }
 }
 
-/// Privacy — the product promise, stated as rows.
 class PrivacyPage extends ConsumerWidget {
   const PrivacyPage({super.key});
 
@@ -696,7 +670,6 @@ class PrivacyPage extends ConsumerWidget {
   }
 }
 
-/// About — live version + family + intro replay.
 class AboutPage extends ConsumerWidget {
   const AboutPage({super.key});
 
@@ -779,12 +752,6 @@ class AboutPage extends ConsumerWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Shared chrome
-// ---------------------------------------------------------------------------
-
-/// Device & updates — real backend, silent self-update (toadFILES flow),
-/// usage-access opt-in. Everything stated plainly, nothing hidden.
 class DeviceUpdatesSettingsPage extends ConsumerWidget {
   const DeviceUpdatesSettingsPage({super.key});
 
@@ -894,9 +861,6 @@ class DeviceUpdatesSettingsPage extends ConsumerWidget {
   }
 }
 
-/// The HOME-role row — P0 of the launcher checklist: the user must be
-/// able to SEE whether toadLAUNCHER is the actual home app and fix it in
-/// one tap (the system role dialog).
 class _DefaultHomeRow extends ConsumerWidget {
   const _DefaultHomeRow();
 
@@ -969,8 +933,6 @@ class _DefaultHomeRow extends ConsumerWidget {
   }
 }
 
-/// The manual check row + inline flow state (checking / up to date /
-/// available → download / progress / install handoff / errors).
 class _UpdateCheckRow extends StatelessWidget {
   const _UpdateCheckRow({required this.state, required this.ink, required this.palette});
 
@@ -1078,8 +1040,6 @@ class _UpdateCheckRow extends StatelessWidget {
                 ),
             ],
           ),
-          // The promised "notes below" — release notes actually rendered
-          // when the release carries them (v0.12 fixed the old lie).
           if (state is UpdateAvailable &&
               (state as UpdateAvailable).release.notes != null &&
               (state as UpdateAvailable).release.notes!.trim().isNotEmpty) ...[
@@ -1120,8 +1080,6 @@ class _UpdateCheckRow extends StatelessWidget {
     );
   }
 
-  /// Release bodies arrive as raw markdown; strip the noisier markup so
-  /// the pond reads clean sentences.
   String _trimNotes(String notes) {
     final lines = notes
         .split('\n')
@@ -1155,8 +1113,6 @@ String _fmtSize(int bytes) {
   return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
 }
 
-/// SEC-01 — the installed build's signing certificate fingerprint, so
-/// anyone can cross-check the APK in hand against SECURITY.md.
 class _CertFingerprintRow extends ConsumerWidget {
   const _CertFingerprintRow({required this.ink, required this.palette});
 
@@ -1371,8 +1327,6 @@ class _SetRow extends StatelessWidget {
   }
 }
 
-/// A settings row whose whole trailing side is a switch (gestures page).
-/// [onChanged] null disables the switch — the row then explains why.
 class _SwitchRow extends StatelessWidget {
   const _SwitchRow({
     required this.title,
@@ -1430,7 +1384,6 @@ class _SwitchRow extends StatelessWidget {
   }
 }
 
-/// A static promise row (Privacy page) — no chevron, no switch.
 class _PromiseRow extends StatelessWidget {
   const _PromiseRow({
     required this.icon,
@@ -1497,7 +1450,6 @@ class _PromiseRow extends StatelessWidget {
   }
 }
 
-/// 2-option inline choice (grid columns).
 class _ChoiceRow extends StatelessWidget {
   const _ChoiceRow({
     required this.title,

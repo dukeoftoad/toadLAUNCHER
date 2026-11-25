@@ -1,7 +1,3 @@
-/// Stage 3 feature tests — edit mode (grid skeleton, selection, resize,
-/// hint bubble, undo), widget picker (live previews, pick-to-place),
-/// wallpaper & style (papers, theme, accent, shape, Pond Pro), settings
-/// hub + sub-pages, and the gesture map (pinch, double-tap, swipes).
 library;
 
 import 'package:flutter/gestures.dart' show kDoubleTapMinTime;
@@ -23,20 +19,12 @@ import 'package:toadlauncher/features/home/home_screen.dart';
 import 'package:toadlauncher/features/wallpaper_style/wallpaper_style_screen.dart'
     show ToadSwitch;
 
-final DateTime _fixedNow = DateTime(2026, 11, 24, 10, 42); // Tuesday
+final DateTime _fixedNow = DateTime(2026, 11, 24, 10, 42);
 
 Future<void> pumpHome(WidgetTester tester) async {
-  // 24 h clock pinned: the “system” format falls back to the test
-  // surface’s 12-hour default otherwise.
   SharedPreferences.setMockInitialValues(<String, Object>{
     'toadlauncher.settings.v1': '{"clockHourFormat": 2}',
   });
-  // The real bridge's MethodChannel, mocked to answer null: without this,
-  // channel calls in the test world never complete (the test messenger
-  // has no platform behind it) — providers like currentVersionProvider
-  // would sit in loading forever and the hub would render 'the toad
-  // build'. Null answers exercise the real fallback path instead:
-  // available() → false → kFallbackVersion, exactly like demo mode.
   TestWidgetsFlutterBinding.ensureInitialized();
   TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
       .setMockMethodCallHandler(
@@ -60,8 +48,6 @@ ProviderContainer containerOf(WidgetTester tester) => ProviderScope.containerOf(
   tester.element(find.byType(HomeScreen, skipOffstage: false)),
 );
 
-/// Phone-like surface — the pushed pages are capped at 440 and every
-/// assertion target must sit inside one phone viewport.
 void usePhoneSurface(WidgetTester tester) {
   tester.view.physicalSize = const Size(393, 852);
   tester.view.devicePixelRatio = 1.0;
@@ -73,7 +59,6 @@ Future<void> openDrawer(WidgetTester tester) async {
   await tester.pumpAndSettle(const Duration(milliseconds: 400));
 }
 
-/// Finds the screen-space rect of the clock widget's dashed selection.
 Rect selectionRect(WidgetTester tester) {
   final painter = find.byWidgetPredicate(
     (w) => w is CustomPaint && w.painter is DashedSelectionPainter,
@@ -132,7 +117,6 @@ void main() {
       expect(layout.widgetsOnPage(0).first.kind, WidgetKind.clock);
       expect(layout.widgetsOnPage(0)[1].kind, WidgetKind.memories);
 
-      // A second clock is refused.
       expect(
         container
             .read(homeLayoutProvider.notifier)
@@ -150,15 +134,12 @@ void main() {
       expect(layout.widgetsOnPage(0).length, 3);
       expect(layout.widgetsOnPage(0).last.kind, WidgetKind.calendar);
 
-      // Resize the clock to 2×4 — the UI snapshots at gesture start and
-      // commits at gesture end; mirror that protocol here.
       final preResize = notifier.snapshot();
       notifier.resizeWidget('widget-clock', w: 2, h: 4);
       notifier.commitAction(preResize);
       expect(container.read(launcherSettingsProvider).clockSpanW, 2);
       expect(container.read(launcherSettingsProvider).clockSpanH, 4);
 
-      // Move calendar to the top of the stack.
       final calendarId = container
           .read(homeLayoutProvider)
           .value!
@@ -173,7 +154,6 @@ void main() {
         WidgetKind.calendar,
       );
 
-      // Undo thrice → stack order back, then clock span back, then un-place.
       notifier.undo();
       expect(
         container.read(homeLayoutProvider).value!.widgetsOnPage(0).last.kind,
@@ -217,13 +197,11 @@ void main() {
     await tester.tap(find.text('Edit home screen'));
     await tester.pumpAndSettle(const Duration(milliseconds: 300));
 
-    // Bottom strip replaced the dock; Done pill present.
     expect(find.text('Wallpapers'), findsOneWidget);
     expect(find.text('Widgets'), findsOneWidget);
     expect(find.text('Settings'), findsOneWidget);
     expect(find.text('Done'), findsOneWidget);
 
-    // Honest grid skeleton painted over the page area.
     expect(
       find.byWidgetPredicate(
         (w) => w is CustomPaint && w.foregroundPainter is GridSkeletonPainter,
@@ -231,7 +209,6 @@ void main() {
       findsOneWidget,
     );
 
-    // The hint bubble teaches once.
     expect(find.text('Got it'), findsOneWidget);
     await tester.tap(find.text('Got it'));
     await tester.pump(const Duration(milliseconds: 300));
@@ -241,7 +218,6 @@ void main() {
       isTrue,
     );
 
-    // Done exits back to the dock.
     await tester.tap(find.text('Done'));
     await tester.pumpAndSettle(const Duration(milliseconds: 300));
     expect(find.text('Done'), findsNothing);
@@ -268,7 +244,6 @@ void main() {
     );
     expect(find.text('Remove'), findsOneWidget);
 
-    // Drag the bottom-right handle down by ~3 rows → the clock re-renders.
     final rect = selectionRect(tester);
     final corner = rect.bottomRight - const Offset(4, 4);
     final gesture = await tester.startGesture(corner);
@@ -276,17 +251,14 @@ void main() {
     await gesture.moveBy(const Offset(0, 90));
     await gesture.moveBy(const Offset(0, 90));
     await gesture.up();
-    // Let the snackbar slide fully in before reaching for its Undo pill.
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pump(const Duration(milliseconds: 400));
 
     expect(container.read(launcherSettingsProvider).clockSpanH, 4);
 
-    // The clock text scaled up past the hero size.
     final timeStyle = tester.widget<Text>(find.text('10:42')).style!;
     expect(timeStyle.fontSize, greaterThan(ToadMetrics.heroClockSize));
 
-    // Per-action undo restores the hero span.
     await tester.tap(find.text('Undo'));
     await tester.pump(const Duration(milliseconds: 300));
     expect(container.read(launcherSettingsProvider).clockSpanH, 1);
@@ -305,7 +277,6 @@ void main() {
     await tester.tap(find.text('Widgets'));
     await tester.pumpAndSettle(const Duration(milliseconds: 500));
 
-    // Featured family citizen + the honest sizes.
     expect(find.text('toadGALLERY · Memories'), findsOneWidget);
     expect(find.textContaining('already on your home'), findsOneWidget);
     expect(find.text('Caveat clock'), findsOneWidget);
@@ -313,7 +284,6 @@ void main() {
     expect(find.text('Month calendar'), findsOneWidget);
     expect(find.text('toadLIST note'), findsOneWidget);
 
-    // Featured tap (already placed) → calm toast, no crash.
     await tester.tap(find.text('toadGALLERY · Memories'));
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pump(const Duration(milliseconds: 400));
@@ -322,11 +292,9 @@ void main() {
       findsOneWidget,
     );
 
-    // Let the toast retire so it no longer covers the bottom strip.
     await tester.pump(const Duration(seconds: 3));
     await tester.pump(const Duration(milliseconds: 400));
 
-    // Pick the calendar → straight into edit mode with the ghost.
     container.read(editModeProvider.notifier).enter();
     await tester.pumpAndSettle();
     await tester.tap(find.text('Widgets'));
@@ -339,14 +307,13 @@ void main() {
       findsOneWidget,
     );
 
-    // Drag the ghost chip onto the page area → it snaps into the stack.
     final chip = find.byType(Draggable<WidgetKind>);
     final chipRect = tester.getRect(chip);
     await gestureDrag(tester, chipRect.center, const Offset(0, -180));
     await tester.pumpAndSettle(const Duration(milliseconds: 400));
 
     expect(find.textContaining('Placed on page 1'), findsOneWidget);
-    expect(find.text('November 2026'), findsOneWidget); // live render
+    expect(find.text('November 2026'), findsOneWidget);
     expect(
       container
           .read(homeLayoutProvider)
@@ -369,13 +336,10 @@ void main() {
     await tester.pumpAndSettle(const Duration(milliseconds: 500));
 
     final container = containerOf(tester);
-    // The pushed page — back to HomeScreen's container works through the
-    // scope (same ProviderScope).
     expect(find.text('POND PRO'), findsOneWidget);
     expect(find.text('WALLPAPER'), findsOneWidget);
     expect(find.text('sage paper'), findsOneWidget);
 
-    // Theme mode → Dark, live (scroll — the pond pack rows sit above it).
     await tester.scrollUntilVisible(
       find.text('Dark'),
       120,
@@ -386,7 +350,6 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
     expect(container.read(launcherSettingsProvider).skinMode, SkinMode.dark);
 
-    // Wallpaper thumb → gold (scroll back up).
     await tester.scrollUntilVisible(
       find.byKey(const ValueKey('paper-1')),
       -120,
@@ -396,10 +359,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('paper-1')));
     await tester.pump(const Duration(milliseconds: 200));
     expect(container.read(launcherSettingsProvider).wallpaperIndex, 1);
-    // The hero banner lives at the top of the (lazy) ListView — assert its
-    // label through the scope instead of the tree.
 
-    // Accent → clay, live re-tint.
     await tester.scrollUntilVisible(
       find.byKey(const ValueKey('accent-clay')),
       120,
@@ -410,7 +370,6 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
     expect(container.read(launcherSettingsProvider).accent, AccentOption.clay);
 
-    // Icon shape → circle.
     await tester.scrollUntilVisible(
       find.byKey(const ValueKey('shape-circle')),
       120,
@@ -424,8 +383,6 @@ void main() {
       IconShape.circle,
     );
 
-    // Pond Pro switch flips the whole home into the scene skin (the pond's
-    // ambient loop keeps running below, so pump fixed steps, never settle).
     await tester.scrollUntilVisible(
       find.byKey(const ValueKey('switch-pond')),
       -120,
@@ -437,7 +394,6 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     expect(container.read(launcherSettingsProvider).pondPro, isTrue);
 
-    // The pond pack rows — rain, calm, battery guard — all live here.
     await tester.scrollUntilVisible(
       find.text('Calm pond'),
       120,
@@ -467,9 +423,6 @@ void main() {
     expect(find.text('Sketchbook · auto · squircle icons'), findsOneWidget);
     expect(find.text('Privacy'), findsOneWidget);
     expect(find.text('No analytics · no network permission'), findsOneWidget);
-    // v0.12 added Permissions & Battery rows — the About row and the
-    // family footer now sit below the fold on phone surfaces; scroll to
-    // them, then back up for the Gestures tap.
     await tester.scrollUntilVisible(
       find.text('$kFallbackVersion · part of the toad family'),
       60,
@@ -486,25 +439,18 @@ void main() {
       find.text('toadLAUNCHER · one family with toadGALLERY & toadPLAYER'),
       findsOneWidget,
     );
-    // Scroll all the way back up — the hub keeps its scroll offset across
-    // sub-page visits, and the header '‹' must be built again for the
-    // later back-taps (lazy list: off-viewport children do not exist).
-    // Negative delta = finger drags down = content scrolls toward the top.
     await tester.scrollUntilVisible(find.text('‹'), -100);
 
-    // Gestures sub-page.
     await tester.tap(find.text('Gestures'));
     await tester.pumpAndSettle(const Duration(milliseconds: 500));
     expect(find.text('Double-tap to sleep'), findsOneWidget);
     expect(find.textContaining('Off by default — takes the shot'), findsOneWidget);
 
     final container = containerOf(tester);
-    // Toggle the double-tap switch off (the first ToadSwitch row).
     await tester.tap(find.byType(ToadSwitch).at(1));
     await tester.pumpAndSettle();
     expect(container.read(launcherSettingsProvider).doubleTapSleep, isFalse);
 
-    // Back to the hub, then Dock & drawer: turn search off live.
     await tester.tap(find.text('‹').last);
     await tester.pumpAndSettle(const Duration(milliseconds: 400));
     await tester.tap(find.text('Dock & drawer'));
@@ -520,8 +466,8 @@ void main() {
     await tester.pumpAndSettle(const Duration(milliseconds: 400));
 
     await openDrawer(tester);
-    expect(find.text('Search apps'), findsNothing); // honest live apply
-    expect(find.text('A'), findsOneWidget); // the index still there
+    expect(find.text('Search apps'), findsNothing);
+    expect(find.text('A'), findsOneWidget);
   });
 
   testWidgets('pinch-in enters edit mode (opt-out switch)', (tester) async {
@@ -530,8 +476,6 @@ void main() {
     final center = tester.getCenter(find.text('10:42'));
     final g1 = await tester.startGesture(center - const Offset(90, 0));
     final g2 = await tester.startGesture(center + const Offset(90, 0));
-    // Interleaved small steps toward each other — a pinch-in measured by
-    // the raw-pointer detector (distance shrinks past 25%).
     for (var i = 0; i < 6; i++) {
       await g1.moveBy(const Offset(14, -4));
       await g2.moveBy(const Offset(-14, -4));
@@ -559,7 +503,6 @@ void main() {
       findsOneWidget,
     );
 
-    // Swipe down on the hero → notifications demo toast.
     await tester.fling(
       find.text('Tuesday · 24 November'),
       const Offset(0, 220),
@@ -591,7 +534,6 @@ void main() {
   });
 }
 
-/// Drag helper that survives Draggable's touch slop.
 Future<void> gestureDrag(WidgetTester tester, Offset from, Offset delta) async {
   final gesture = await tester.startGesture(from);
   await gesture.moveBy(delta * 0.25);

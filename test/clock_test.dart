@@ -1,7 +1,3 @@
-/// CLOCK (roadmap §6 + PLT-13) — the four faces and their formatting:
-/// word-clock phrasing, 12/24-hour formats, flip parts, settings
-/// round-trips for style/format/policy (SEC-04 ships with the same
-/// settings surface).
 library;
 
 import 'package:flutter_test/flutter_test.dart';

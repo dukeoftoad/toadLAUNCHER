@@ -1,4 +1,3 @@
-/// App icon tile — gradient tile + glyph, shape-aware, toadGALLERY face.
 library;
 
 import 'package:material_ui/material_ui.dart';
@@ -11,9 +10,6 @@ import '../../core/settings/launcher_settings.dart';
 import '../../core/theme/toad_tokens.dart';
 import '../../core/theme/toad_theme.dart';
 
-/// One app icon: 54x54 r17 tile with 145deg gradient and a 24px glyph.
-/// Family-toad apps render the shared toad face from the proposal; device
-/// mode swaps demo glyphs for the app's real adaptive icon.
 class ToadAppIcon extends ConsumerWidget {
   const ToadAppIcon({
     super.key,
@@ -46,8 +42,6 @@ class ToadAppIcon extends ConsumerWidget {
         ? AppIconGradients.toad
         : AppIconGradients.all[app.gradientIndex % AppIconGradients.all.length];
 
-    // Live notification counts (v0.11) — dot for every active
-    // notification; written count when Badges is on too.
     final settings = ref.watch(launcherSettingsProvider);
     final count = settings.notificationDots && app.packageName != null
         ? (ref.watch(notificationCountsProvider)[app.packageName!] ?? 0)
@@ -148,8 +142,6 @@ class ToadAppIcon extends ConsumerWidget {
   }
 }
 
-/// The toadGALLERY face — exact geometry from the proposal's SVG
-/// (viewBox 0 0 26 26).
 class ToadFacePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
@@ -160,16 +152,13 @@ class ToadFacePainter extends CustomPainter {
     const inkDot = Color(0xFF2B2924);
     final paint = Paint()..color = paper;
 
-    // Eyes.
     canvas.drawCircle(Offset(8.2 * sx, 7.6 * sy), 3.5 * sx, paint);
     canvas.drawCircle(Offset(17.8 * sx, 7.6 * sy), 3.5 * sx, paint);
 
-    // Pupils.
     paint.color = inkDot;
     canvas.drawCircle(Offset(8.2 * sx, 7.6 * sy), 1.5 * sx, paint);
     canvas.drawCircle(Offset(17.8 * sx, 7.6 * sy), 1.5 * sx, paint);
 
-    // Body: translated verbatim from the SVG path.
     final body = Path()
       ..moveTo(4 * sx, 15.2 * sy)
       ..relativeCubicTo(0, -1.2 * sy, 0.9 * sx, -2.1 * sy, 2.3 * sx, -2.1 * sy)
@@ -188,7 +177,6 @@ class ToadFacePainter extends CustomPainter {
   bool shouldRepaint(covariant ToadFacePainter oldDelegate) => false;
 }
 
-/// Label under a grid icon — Patrick Hand 12.5 with the skin's halo shadow.
 class ToadAppLabel extends StatelessWidget {
   const ToadAppLabel({
     super.key,

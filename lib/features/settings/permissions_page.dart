@@ -1,12 +1,3 @@
-/// Permissions & access — the one page that never lets a special access
-/// stay silently denied.
-///
-/// v0.11's flaw: every special access hid inside a different sub-page
-/// (dots inside Notifications, the lock inside Gestures, usage inside
-/// Device & updates), so a fresh install read "denied" everywhere and
-/// the app never asked. This page lists all five, states the live status
-/// in plain words, and asks — the calm dialog first, then the EXACT
-/// Android toggle, then an automatic re-check when the user returns.
 library;
 
 import 'package:flutter/services.dart' show SystemUiOverlayStyle;
@@ -20,7 +11,6 @@ import '../../shared/widgets/toad_ask.dart';
 import '../../shared/widgets/toad_toast.dart';
 import '../home/home_controller.dart' show ToastEvent;
 
-/// Entry point — Settings hub row + the first-run banner.
 Future<void> openPermissionsPage(BuildContext context) {
   return Navigator.of(context).push(
     MaterialPageRoute<void>(builder: (_) => const PermissionsPage()),
@@ -76,19 +66,11 @@ class _PermissionsPageState extends ConsumerState<PermissionsPage> {
     });
   }
 
-  /// Open a toggle, wait for the user to flip it there, then re-check.
-  /// The user coming back to the launcher is the signal Android gave us;
-  /// a short settle delay keeps ROMs that write the setting late honest.
-  ///
-  /// PLT-01: on Android 13+ sideloads, Notification access and the lock
-  /// service sit behind "Restricted settings" — the pre-step opens App
-  /// info with the three-tap guide FIRST, then the real toggle.
   Future<void> _askAndGrant(
     ToadAsk Function(Future<void> Function()) make,
   ) async {
     final bridge = ref.read(deviceBridgeProvider);
 
-    // The restricted pre-step, when the platform needs it.
     final restrictedProne =
         make == askNotificationAccess || make == askLockService;
     var guideShown = false;
@@ -111,13 +93,10 @@ class _PermissionsPageState extends ConsumerState<PermissionsPage> {
     final proceeded = await showToadAsk(
       context,
       make(() async {
-        // The concrete deep-link fires here, via the bridge — every ask
-        // factory receives the exact open action for its access.
         await _openToggleFor(make);
       }),
     );
     if (!proceeded || !mounted) return;
-    // Re-check shortly after return — toggles sometimes lag a beat.
     await Future<void>.delayed(const Duration(milliseconds: 900));
     await _checkAll();
     if (!mounted) return;
@@ -137,7 +116,6 @@ class _PermissionsPageState extends ConsumerState<PermissionsPage> {
       );
   }
 
-  /// The exact toggle per ask — the deep-link Android needs.
   Future<void> _openToggleFor(
     ToadAsk Function(Future<void> Function()) make,
   ) async {
@@ -153,10 +131,7 @@ class _PermissionsPageState extends ConsumerState<PermissionsPage> {
     }
   }
 
-  /// Map the ask factory back to its live status for the post-grant toast.
   bool? _statusOf(ToadAsk Function(Future<void> Function()) make) {
-    // The five rows are identified by their factories; simple equality
-    // keeps the mapping honest without extra machinery.
     if (make == askDefaultHome) return _isHome;
     if (make == askNotificationAccess) return _notifs;
     if (make == askLockService) return _lock;
@@ -394,7 +369,6 @@ class _PermissionsPageState extends ConsumerState<PermissionsPage> {
   }
 }
 
-/// One special access: icon, name, honest status line, grant pill.
 class _PermCard extends StatelessWidget {
   const _PermCard({
     required this.palette,
@@ -503,7 +477,6 @@ class _PermCard extends StatelessWidget {
   }
 }
 
-/// Shared group card (mirrors the settings hub's).
 class _GroupCard extends StatelessWidget {
   const _GroupCard({required this.palette, required this.child});
 

@@ -46,38 +46,17 @@ import java.security.spec.X509EncodedKeySpec
 import java.util.Base64
 import java.util.concurrent.Executors
 
-/**
- * toadLAUNCHER — the ONE Kotlin adapter file, deliberately thin.
- *
- * Flutter owns every decision (indexing, family registry, update state
- * machine, version compare, settings, persistence). This adapter only
- * relays what the OS can do that Dart cannot: enumerate/launch apps,
- * usage stats, wallpaper, widget HOSTING (AppWidgetHost + platform
- * views), default-home role, the notification shade, the lock screen
- * (through the accessibility service), app shortcuts, notification
- * counts, package-change events, battery status (the sticky
- * ACTION_BATTERY_CHANGED intent — level + plugged, nothing more), and
- * the system DownloadManager (whose process — not ours — holds the
- * network, keeping the launcher INTERNET-free).
- */
 class MainActivity : FlutterActivity() {
 
     private val executor = Executors.newSingleThreadExecutor()
 
-    /** Update ops own their thread: a release check can block for tens of
-     *  seconds, and it must never delay app indexing or wallpaper work on
-     *  [executor] — the v0.12 shared-thread design froze the whole channel
-     *  behind a 25 s update check. */
     private val updateExecutor = Executors.newSingleThreadExecutor()
     private var channel: MethodChannel? = null
     private var pendingWallpaperResult: MethodChannel.Result? = null
     private var widgetHost: AppWidgetHost? = null
 
-    /** Live hosted views by appWidgetId — resize notifications (PLT-07)
-     *  reach the real AppWidgetHostView through this map. */
     private val hostedViews = HashMap<Int, android.widget.FrameLayout>()
 
-    /** Index refresh: installs / updates / removals land here live. */
     private val packageEvents = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             val pkg = intent.data?.schemeSpecificPart ?: return
@@ -88,8 +67,6 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    /** Battery ticks: the OS broadcasts on every level/plugged change and
-     *  we relay the two facts Dart needs. No permission required. */
     private val batteryEvents = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             if (intent.action != Intent.ACTION_BATTERY_CHANGED) return
@@ -105,8 +82,6 @@ class MainActivity : FlutterActivity() {
         )
         flutterEngine.platformViewsController.registry
             .registerViewFactory(VIEW_TYPE, ToadWidgetViewFactory(this))
-        // Notification counts arrive from the listener service (same
-        // process); relay them to Dart over the one channel.
         ToadNotificationListener.onCountsChanged = { counts ->
             channel?.invokeMethod("notificationCounts", counts)
         }
@@ -134,7 +109,6 @@ class MainActivity : FlutterActivity() {
                     setWallpaperBytes(png)
                 }
                 "pickAndSetWallpaper" -> {
-                    // Completes later from onActivityResult — never onMain.
                     pendingWallpaperResult = result
                     try {
                         startActivityForResult(pickIntent(), PICK_WALLPAPER)
@@ -207,25 +181,19 @@ class MainActivity : FlutterActivity() {
                 "openUrl" -> onMain(result) {
                     openUrl(call.argument<String>("url") ?: "")
                 }
-                // SEC-02: verify the release's detached update signature.
                 "verifyUpdateSignature" -> onMain(result) {
                     verifyUpdateSignature(
                         call.argument<String>("message") ?: "",
                         call.argument<String>("signature") ?: "",
                     )
                 }
-                // REL-01: local crash-log + diagnostics support.
                 "appFilesDir" -> result.success(filesDir.absolutePath)
                 "signingCertFingerprint" -> onMain(result) { signingCertFingerprint() }
                 "openHomeSettings" -> onMain(result) { openHomeSettings() }
                 "shareDiagnosticsFile" -> onMain(result) {
                     shareDiagnosticsFile(call.argument<String>("path") ?: "")
                 }
-                // PLT-01: the ask flow adapts to the platform version
-                // (Restricted Settings arrive on Android 13).
                 "osSdkInt" -> result.success(Build.VERSION.SDK_INT)
-                // PLT-07: tell a hosted widget its new size (responsive
-                // widgets re-render when the span changes).
                 "resizeHostedWidget" -> onMain(result) {
                     resizeHostedWidget(
                         (call.arguments as Map<*, *>)["appWidgetId"] as Number,
@@ -233,15 +201,11 @@ class MainActivity : FlutterActivity() {
                         (call.arguments as Map<*, *>)["heightDp"] as Number,
                     )
                 }
-                // PLT-03: real screenshot through the lock service.
                 "takeScreenshot" -> onMain(result) { takeScreenshot() }
                 else -> result.notImplemented()
             }
         }
     }
-
-    // ------------------------------------------------------------------
-    // lifecycle — widget host + package events
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -256,15 +220,11 @@ class MainActivity : FlutterActivity() {
             addDataScheme("package")
         }
         if (Build.VERSION.SDK_INT >= 33) {
-            // Protected system broadcasts — NOT_EXPORTED still receives
-            // them; other apps can never spoof into this receiver.
             registerReceiver(packageEvents, filter, Context.RECEIVER_NOT_EXPORTED)
         } else {
             @Suppress("UnspecifiedRegisterReceiverOption")
             registerReceiver(packageEvents, filter)
         }
-        // ACTION_BATTERY_CHANGED is a sticky, protected system broadcast —
-        // no permission, no export concerns (it can only come from the OS).
         val batteryFilter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
         if (Build.VERSION.SDK_INT >= 33) {
             registerReceiver(batteryEvents, batteryFilter, Context.RECEIVER_NOT_EXPORTED)
@@ -276,7 +236,6 @@ class MainActivity : FlutterActivity() {
 
     override fun onStart() {
         super.onStart()
-        // Host must listen before createView so widgets receive updates.
         ensureWidgetHost().startListening()
     }
 
@@ -302,9 +261,6 @@ class MainActivity : FlutterActivity() {
         super.onDestroy()
     }
 
-    // ------------------------------------------------------------------
-    // plumbing
-
     private inline fun onMain(
         result: MethodChannel.Result,
         crossinline body: () -> Any?,
@@ -317,8 +273,6 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    /** IllegalStateException.message doubles as the channel error code
-     *  ("noAccess", "unavailable", "noApkAsset", "downloadUnavailable"). */
     private inline fun onExecutor(
         result: MethodChannel.Result,
         crossinline body: () -> Any?,
@@ -335,7 +289,6 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    /** The update twin of [onExecutor] — same error contract, own thread. */
     private inline fun onUpdateExecutor(
         result: MethodChannel.Result,
         crossinline body: () -> Any?,
@@ -352,9 +305,6 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    // ------------------------------------------------------------------
-    // apps
-
     private fun versionInfo(): Map<String, Any> {
         val info = packageManager.getPackageInfo(packageName, 0)
         return mapOf(
@@ -363,13 +313,6 @@ class MainActivity : FlutterActivity() {
         )
     }
 
-    // ------------------------------------------------------------------
-    // battery (v0.12) — level + plugged from the sticky battery intent.
-    // The launcher keeps NO battery history here: sampling, drain rate
-    // and the low-battery guard are all Dart (Flutter owns decisions).
-    // ------------------------------------------------------------------
-
-    /** The two facts Dart needs from an ACTION_BATTERY_CHANGED intent. */
     private fun batteryMap(intent: Intent): Map<String, Any> {
         val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
         val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
@@ -410,7 +353,6 @@ class MainActivity : FlutterActivity() {
         return out
     }
 
-    /** Rasterize any drawable (incl. adaptive icons) to a PNG. */
     private fun iconPng(
         drawable: android.graphics.drawable.Drawable,
         size: Int = 96,
@@ -466,9 +408,6 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    // ------------------------------------------------------------------
-    // usage recents (special access, opt-in from Flutter)
-
     private fun hasUsageAccess(): Boolean {
         return try {
             val appOps = getSystemService(Context.APP_OPS_SERVICE) as android.app.AppOpsManager
@@ -490,7 +429,6 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    /** Package ids by most recent use over the last 7 days. */
     private fun usageRecents(): List<String> {
         if (!hasUsageAccess()) throw IllegalStateException("noAccess")
         val usm = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
@@ -508,9 +446,6 @@ class MainActivity : FlutterActivity() {
             .sortedByDescending { it.value }
             .map { it.key }
     }
-
-    // ------------------------------------------------------------------
-    // wallpaper
 
     private fun setWallpaperBytes(png: ByteArray?): Boolean {
         if (png == null) return false
@@ -549,9 +484,6 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    // ------------------------------------------------------------------
-    // widgets
-
     private fun toadWidgets(familyIds: List<String>): List<Map<String, Any?>> {
         val awm = AppWidgetManager.getInstance(this)
         return awm.installedProviders
@@ -575,12 +507,6 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    // ------------------------------------------------------------------
-    // updates — through the system DownloadManager (network in the
-    // system's process; this app stays INTERNET-free). Ported to the
-    // toadFILES flow that actually works on-device: app-private
-    // destination + DownloadManager content URI + plain install intent.
-
     private fun newDownload(
         url: String,
         title: String,
@@ -593,9 +519,6 @@ class MainActivity : FlutterActivity() {
             .setDescription("toadLAUNCHER")
             .setMimeType(mimeType)
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
-            // The user tapped a button (or opted into the auto-check):
-            // honor metered networks too — Wi-Fi-only queuing is how
-            // "stuck at 0%" bugs are born.
             .setAllowedOverMetered(true)
         if (toPublicDownloads) {
             builder.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
@@ -610,7 +533,6 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    /** App-private updates dir — never public Downloads. */
     private fun appPrivateUpdatesDir(): File =
         File(getExternalFilesDir(null), "updates").apply { mkdirs() }
 
@@ -648,10 +570,6 @@ class MainActivity : FlutterActivity() {
                 anyApkUrl = a.optString("browser_download_url")
                 anyApkSize = a.optLong("size")
             }
-            // Prefer the asset that names the launcher, but never depend on
-            // exact naming — a renamed asset must not break the update
-            // (the old contains("toadlauncher") filter threw noApkAsset
-            // whenever the release asset carried a different name).
             if (apkUrl == null && name.contains("launcher", ignoreCase = true)) {
                 apkName = name
                 apkUrl = a.optString("browser_download_url")
@@ -685,10 +603,6 @@ class MainActivity : FlutterActivity() {
                 anyApkUrl = a.optString("browser_download_url")
                 anyApkSize = a.optLong("size")
             }
-            // Prefer the asset that names the launcher, but never depend on
-            // exact naming — a renamed asset must not break the update
-            // (the old contains("toadlauncher") filter threw noApkAsset
-            // whenever the release asset carried a different name).
             if (apkUrl == null && name.contains("launcher", ignoreCase = true)) {
                 apkName = name
                 apkUrl = a.optString("browser_download_url")
@@ -715,7 +629,6 @@ class MainActivity : FlutterActivity() {
                         ?.lowercase()
                 }
             } catch (e: Exception) {
-                // checksum optional — installer says so honestly
             }
         }
         if (sigAssetUrl != null) {
@@ -727,8 +640,6 @@ class MainActivity : FlutterActivity() {
                     sig = readDownload(sigId)?.let { String(it) }?.trim()
                 }
             } catch (e: Exception) {
-                // Signature missing → the Dart engine refuses the update
-                // (honest error, release-page handoff).
             }
         }
 
@@ -744,17 +655,11 @@ class MainActivity : FlutterActivity() {
         )
     }
 
-    /** APK signing certificates we accept for updates: the lineage root
-     *  (v0.9 → v1.0 key, retired, no rollback capability) and the current
-     *  key. Anything else is an impersonation attempt. */
     private val expectedApkCertSha256 = setOf(
         "6ae99f0bb980b0cb6bc707bff4a6659ade18947e9db203946193c514c200702a",
         "5fdadde01fdf2517a70aac86f315887cb79b74a0d478796f0d4bf40ccb7ac6b6",
     )
 
-    /** SHA-256 hex of the APK's signing certificate, or null when it
-     *  cannot be parsed. Streams to a cache temp file because
-     *  getPackageArchiveInfo needs a filesystem path. */
     private fun apkSignerCertHex(uri: Uri): String? {
         return try {
             val tmp = File(cacheDir, "verify-update.apk")
@@ -774,14 +679,6 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    /** APK → the APP-PRIVATE updates dir (toadFILES' proven layout). From
-     *  here the initiating app can always read the job back through
-     *  DownloadManager's own content URI — zero storage permissions, every
-     *  Android from 7 to 15. Public Downloads + COLUMN_LOCAL_URI was the
-     *  v0.12 break: scoped storage made that file unreadable to us, so
-     *  every install handoff died as "failed". The stale destination is
-     *  deleted before enqueue because DownloadManager refuses to overwrite
-     *  an existing file — this is what makes a retry actually re-download. */
     private fun enqueueApk(url: String, fileName: String, title: String): Long {
         val name = fileName.takeLastWhile { it != '/' && it != '\\' }
             .ifBlank { "toadlauncher-update.apk" }
@@ -848,8 +745,6 @@ class MainActivity : FlutterActivity() {
 
     private fun readDownload(id: Long): ByteArray? {
         val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-        // Preferred: the job's own content URI — always readable by the app
-        // that enqueued it, whatever the destination type or Android version.
         try {
             dm.openDownloadedFile(id)?.use { pfd ->
                 return android.os.ParcelFileDescriptor.AutoCloseInputStream(pfd)
@@ -876,18 +771,6 @@ class MainActivity : FlutterActivity() {
         return null
     }
 
-    /** SHA-256 gate (streamed, never the whole APK in RAM), then the
-     *  toadFILES install handoff: the job's own DownloadManager content URI
-     *  handed to the system installer via ACTION_VIEW with a read grant.
-     *  The v0.12 PackageInstaller-session path is gone — it buffered the
-     *  whole APK, never registered its status receiver, died quietly on
-     *  ROMs that refuse mutable PendingIntents, and referenced
-     *  PackageInstaller WITHOUT its import (the committed tree could not
-     *  even compile — the true "update is broken" root).
-     *
-     *  SEC-02: the APK's signing certificate must be one of ours (the
-     *  lineage root or the current key) — a correctly-hashed APK signed by
-     *  anyone else is rejected before the installer ever sees it. */
     private fun installDownloadedApk(id: Number, expectedSha256: String?): String {
         val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
         val uri = dm.getUriForDownloadedFile(id.toLong()) ?: return "failed"
@@ -913,15 +796,12 @@ class MainActivity : FlutterActivity() {
             }
         }
 
-        // SEC-02: signer certificate gate.
         val certHex = apkSignerCertHex(uri)
         if (certHex == null || certHex !in expectedApkCertSha256) {
             Log.w(TAG, "update APK signer certificate mismatch")
             return "wrongCertificate"
         }
 
-        // "Install unknown apps" gate — open the exact settings toggle;
-        // the banner's retry row resumes after the flip (toadFILES flow).
         val canInstall = try {
             packageManager.canRequestPackageInstalls()
         } catch (e: Exception) {
@@ -944,8 +824,6 @@ class MainActivity : FlutterActivity() {
                 setDataAndTypeAndNormalize(uri, "application/vnd.android.package-archive")
                 clipData = android.content.ClipData.newRawUri(null, uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                // The handoff can complete while the launcher is backgrounded;
-                // NEW_TASK keeps the start legal from any context.
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             startActivity(install)
@@ -965,18 +843,6 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    // ------------------------------------------------------------------
-    // SEC-02 — the update trust chain. The release's detached signature
-    // (ECDSA P-256 over "tagName|sha256|assetName") is verified with the
-    // UPDATE-signing public key embedded below — a separate key from the
-    // APK signing key, held only in CI secrets. A tampered hash, a
-    // tampered signature or a wrong-asset swap all fail here, BEFORE the
-    // banner ever says "update available".
-    // ------------------------------------------------------------------
-
-    /** The update-signing public key (X.509 SPKI, base64). Private half
-     *  lives only in the repo's CI secrets. Fingerprint printed in
-     *  SECURITY.md. */
     private val updateSigningPublicKeyB64 =
         "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEaQeJVytfG0WM4Y4W1w6kBq37zee6cyVJ9Lt" +
             "/EqYxe1UdP4g95Ty9KHv21TiDbYyChWODrDAjXxvrNJpEjY0Vsg=="
@@ -997,8 +863,6 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    /** SHA-256 hex of our own signing certificate (Settings → About shows
-     *  it so users can cross-check against SECURITY.md). */
     private fun signingCertFingerprint(): String? {
         return try {
             val info = packageManager.getPackageInfo(packageName, PackageManager.GET_SIGNATURES)
@@ -1009,9 +873,6 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    /** SEC-03: delete update leftovers older than a week — the updates dir
-     *  never accumulates stale APKs (install handoffs that never completed,
-     *  old versions after a successful update). */
     private fun sweepStaleDownloads() {
         executor.execute {
             try {
@@ -1027,7 +888,6 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    /** REL-01: the system Home picker (safe mode's escape hatch). */
     private fun openHomeSettings(): Boolean {
         return try {
             startActivity(Intent(Settings.ACTION_HOME_SETTINGS))
@@ -1037,14 +897,10 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    /** REL-01: share the local crash log via the system sheet — the file
-     *  never leaves the phone unless the user chooses a target. Shared as
-     *  plain text (the log is text), so no file provider is needed. */
     private fun shareDiagnosticsFile(path: String): Boolean {
         return try {
             val file = File(path)
             if (!file.exists()) return false
-            // Bound the payload: share the tail (most recent entries).
             val bytes = file.readBytes()
             val text = if (bytes.size > 200_000) {
                 "…(older entries trimmed)\n" + String(bytes, bytes.size - 200_000, 200_000, Charsets.UTF_8)
@@ -1062,8 +918,6 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    // PLT-07: forward a size change to the real AppWidgetHostView so
-    // responsive widgets re-render at the right size.
     private fun resizeHostedWidget(appWidgetId: Number, widthDp: Number, heightDp: Number): Boolean {
         return try {
             val container = hostedViews[appWidgetId.toInt()] ?: return false
@@ -1084,8 +938,6 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    /** PLT-03: the two-finger screenshot, finally real — the accessibility
-     *  service's global action (API 28+), same consent as the lock. */
     private fun takeScreenshot(): Boolean {
         val service = ToadLockService.instance ?: return false
         return try {
@@ -1094,11 +946,6 @@ class MainActivity : FlutterActivity() {
             false
         }
     }
-
-    // ------------------------------------------------------------------
-    // widget HOSTING — AppWidgetHost owns ids; views render through the
-    // "toad-widget-host" platform view (hybrid composition on the Dart
-    // side). Binding needs the default-home role; the UI explains that.
 
     private fun ensureWidgetHost(): AppWidgetHost {
         var host = widgetHost
@@ -1109,7 +956,6 @@ class MainActivity : FlutterActivity() {
         return host
     }
 
-    /** Every widget provider on the phone — the picker's full shelf. */
     private fun listHostableWidgets(): List<Map<String, Any?>> {
         val awm = AppWidgetManager.getInstance(this)
         val out = mutableListOf<Map<String, Any?>>()
@@ -1139,8 +985,6 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    /** Allocate + bind. Returns the bound id, or null when refused
-     *  (refusal means "not the default home" — the UI says exactly that). */
     private fun hostWidget(providerId: String): Int? {
         return try {
             val cn = ComponentName.unflattenFromString(providerId) ?: return null
@@ -1166,14 +1010,9 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    /** Called by the platform-view factory (main thread) to inflate the
-     *  real AppWidgetHostView into [container]. The container is tracked
-     *  so resize notifications (PLT-07) reach the live view. */
     fun renderWidgetInto(container: FrameLayout, appWidgetId: Int?, providerId: String?) {
         val awm = AppWidgetManager.getInstance(this)
         val bound = appWidgetId?.let { awm.getAppWidgetInfo(it) }
-        // API 37 removed AppWidgetProviderInfo.packageName/name — resolve
-        // unbound-id fallbacks through the provider ComponentName.
         val providerInfo = bound ?: providerId?.let { pid ->
             ComponentName.unflattenFromString(pid)?.let { cn ->
                 awm.installedProviders.firstOrNull { it.provider == cn }
@@ -1207,13 +1046,9 @@ class MainActivity : FlutterActivity() {
         return tv
     }
 
-    /** A platform view went away — stop tracking its container. */
     fun forgetHostedView(appWidgetId: Int?) {
         if (appWidgetId != null) hostedViews.remove(appWidgetId)
     }
-
-    // ------------------------------------------------------------------
-    // launcher-grade system integrations
 
     private fun isDefaultHome(): Boolean {
         return try {
@@ -1232,7 +1067,6 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    /** Opens the system role dialog (API 29+) or the home settings page. */
     private fun requestDefaultHome(): Boolean {
         return try {
             if (Build.VERSION.SDK_INT >= 29) {
@@ -1249,11 +1083,6 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    /** Pulls the real notification shade. Primary: the hidden
-     *  StatusBarManager call every third-party launcher uses. Fallback
-     *  (PLT-02): the accessibility service's global action when the
-     *  hidden API is blocked — same opt-in consent as the lock, honest
-     *  failure when neither route exists. */
     private fun expandNotificationsPanel(): Boolean {
         try {
             val sbs = getSystemService(Context.STATUS_BAR_SERVICE) ?: return fallbackShade()
@@ -1276,7 +1105,6 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    /** Lock via the accessibility service (API 28+ global action). */
     private fun lockScreen(): Boolean {
         val service = ToadLockService.instance ?: return false
         return try {
@@ -1336,9 +1164,6 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    /** Dynamic + manifest + pinned shortcuts of one app. Only the default
-     *  home is allowed to query them — an empty list says "nothing to
-     *  show". */
     private fun appShortcuts(pkg: String): List<Map<String, Any?>> {
         if (!isDefaultHome()) return emptyList()
         return try {
@@ -1377,7 +1202,6 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    /** The old demo toast becomes a real ACTION_SEND chooser. */
     private fun shareApp(pkg: String): Boolean {
         return try {
             val label = packageManager.getApplicationLabel(
@@ -1405,12 +1229,6 @@ class MainActivity : FlutterActivity() {
     }
 }
 
-/**
- * The platform-view bridge — Flutter embeds real home-screen widgets
- * through this factory (hybrid composition from Dart). Creation params:
- *   appWidgetId  Int   — the AppWidgetHost id Dart persisted
- *   providerId   String — flat ComponentName fallback
- */
 class ToadWidgetViewFactory(
     private val activity: MainActivity,
 ) : PlatformViewFactory(StandardMessageCodec.INSTANCE) {

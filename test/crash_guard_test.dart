@@ -1,6 +1,3 @@
-/// REL-01 — the crash-loop ledger and its verdict. The decision logic is
-/// pure (no device needed); the ledger itself round-trips through mocked
-/// SharedPreferences.
 library;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -75,14 +72,11 @@ void main() {
     });
 
     test('record → verdict flips after three boots; clear resets', () async {
-      // Three boots, one crash each.
       await CrashGuard.record('flutter', 'first', StackTrace.current);
       await CrashGuard.record('platform', 'second', StackTrace.current);
       await CrashGuard.record('zone', 'third', null);
-      // All three share THIS process's boot id → not a loop…
       expect(await CrashGuard.verdict(), isFalse);
 
-      // …but after clear() nothing remains.
       await CrashGuard.clear();
       expect(await CrashGuard.verdict(), isFalse);
       expect(await CrashGuard.ledgerText(), 'no crashes recorded');

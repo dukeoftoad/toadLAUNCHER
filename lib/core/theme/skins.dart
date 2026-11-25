@@ -1,32 +1,20 @@
-/// Skin enums + resolution — neutral module shared by settings and theme.
 library;
 
 import 'dart:ui' show Brightness;
 
 import 'toad_tokens.dart';
 
-/// Appearance modes selected in Wallpaper & style.
 enum SkinMode { system, light, dark, amoled }
 
-/// Fully-resolved skin — what a screen should paint with right now.
 enum ResolvedSkin { light, dark, amoled, pondDay, pondNight }
 
-/// Icon shape override applied to adaptive icons uniformly.
 enum IconShape { squircle, circle, rounded }
 
-/// Skin predicates used across the app.
 extension ResolvedSkinX on ResolvedSkin {
   bool get isPond =>
       this == ResolvedSkin.pondDay || this == ResolvedSkin.pondNight;
 }
 
-/// Resolve the effective skin from settings + system brightness + clock.
-///
-/// Day/night on Pond Pro is clock-driven only: after the sunset anchor
-/// (default 19:30) until the sunrise anchor (default 6:30). Calm pond
-/// (or an active battery guard on device) short-circuits the clock:
-/// "night falls instantly and the whole loop freezes into a still
-/// painting".
 ResolvedSkin resolveSkin({
   required SkinMode mode,
   required bool pondPro,
@@ -60,7 +48,6 @@ ResolvedSkin resolveSkin({
   }
 }
 
-/// Base palette for a resolved skin (before user accent override).
 ToadPalette paletteFor(ResolvedSkin skin) {
   switch (skin) {
     case ResolvedSkin.light:
@@ -70,7 +57,7 @@ ToadPalette paletteFor(ResolvedSkin skin) {
     case ResolvedSkin.amoled:
       return kAmoledPalette;
     case ResolvedSkin.pondDay:
-      return kLightPalette; // Pond surfaces still use sketchbook cards.
+      return kLightPalette;
     case ResolvedSkin.pondNight:
       return kDarkPalette;
   }

@@ -1,5 +1,3 @@
-/// Lily pad painter — exact geometry from the proposal's `padD`/`padN` SVG
-/// symbols (viewBox 0 0 120 84).
 library;
 
 import 'package:material_ui/material_ui.dart';
@@ -16,7 +14,6 @@ class LilyPadPainter extends CustomPainter {
     final sx = size.width / 120;
     final sy = size.height / 84;
 
-    // Pad body: M114.5 28.3 A58 40 0 1 0 114.5 55.7 L78 42 Z
     final pad = Path()
       ..moveTo(114.5 * sx, 28.3 * sy)
       ..arcToPoint(
@@ -31,7 +28,7 @@ class LilyPadPainter extends CustomPainter {
     final rect = Offset.zero & size;
     final paint = Paint()
       ..shader = RadialGradient(
-        center: const Alignment(-0.3, -0.4), // 35% / 30%
+        center: const Alignment(-0.3, -0.4),
         radius: 1.35,
         colors: palette.padFill.map(((double, Color) e) => e.$2).toList(),
         stops: palette.padFill.map(((double, Color) e) => e.$1).toList(),
@@ -39,7 +36,6 @@ class LilyPadPainter extends CustomPainter {
 
     canvas.drawPath(pad, paint);
 
-    // Veins: five spokes from the notch hub.
     final vein = Paint()
       ..color = palette.padVein.withValues(alpha: palette.padVeinOpacity)
       ..strokeWidth = 1.4 * (sx + sy) / 2
@@ -67,7 +63,6 @@ class LilyPadPainter extends CustomPainter {
       oldDelegate.palette.padFill != palette.padFill;
 }
 
-/// Static pad shadow — the soft dark pool under each pad.
 class PadShadowPainter extends CustomPainter {
   PadShadowPainter({required this.color});
 

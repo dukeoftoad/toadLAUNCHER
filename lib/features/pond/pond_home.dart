@@ -1,12 +1,3 @@
-/// Pond home — Pond Pro scene skin (screens 11 & 12) with the full M4
-/// ambient loop.
-///
-/// The scene painters repaint through the shared ambient clock (no widget
-/// rebuilds); pad bob and toad bob are transform-only compositor moves; the
-/// resident blinks, croaks when tapped (grumpily at night), and swiping up
-/// opens the mouth showcase drawer — "the drawer is the toad".
-/// Calm pond (or an active battery guard on device) freezes the loop into
-/// a still painting.
 library;
 
 import 'dart:math' as math;
@@ -49,7 +40,6 @@ class _PondHomeState extends ConsumerState<PondHome> {
   late final PageController _pageController;
   final int _pageCount = 3;
 
-  /// Long-press menu raised from a lily pad (pondApp variant).
   MenuRequest? _menu;
 
   @override
@@ -161,16 +151,12 @@ class _PondHomeState extends ConsumerState<PondHome> {
         ),
         child: Scaffold(
           backgroundColor: Colors.transparent,
-          // The pond is the one screen that must never freeze silently:
-          // ambient loop + mouth drawer own their tickers.
           body: TickerMode(
             enabled: true,
             child: PondAmbient(
               builder: (context, elapsed) => Stack(
                 fit: StackFit.expand,
                 children: [
-                  // Scene background — repaints off the ambient clock; the
-                  // day→night hand-off crossfades over 2 s.
                   AnimatedSwitcher(
                     duration: ToadMotion.dayNightCrossfade,
                     child: CustomPaint(
@@ -183,11 +169,9 @@ class _PondHomeState extends ConsumerState<PondHome> {
                     ),
                   ),
 
-                  // Live widgets layer.
                   SafeArea(
                     bottom: false,
                     child: GestureDetector(
-                      // "Swipe up on the log — the drawer is the toad."
                       onVerticalDragEnd: (details) {
                         final v = details.primaryVelocity ?? 0;
                         if (settings.swipeUpDrawer &&
@@ -218,7 +202,6 @@ class _PondHomeState extends ConsumerState<PondHome> {
                                 ),
                           ),
 
-                          // The clock's shimmering reflection.
                           _ClockReflection(
                             time: hero.time,
                             opacity: pond.reflectionOpacity,
@@ -227,7 +210,6 @@ class _PondHomeState extends ConsumerState<PondHome> {
 
                           const SizedBox(height: 18),
 
-                          // Lily-pad rows — the bob rides the ambient clock.
                           layoutAsync.maybeWhen(
                             data: (layout) => Expanded(
                               child: FutureBuilder<List<List<AppEntry>>>(
@@ -263,7 +245,6 @@ class _PondHomeState extends ConsumerState<PondHome> {
                             orElse: () => const Spacer(),
                           ),
 
-                          // Page dots become firefly embers (glow at night).
                           PageDots(
                             count: _pageCount,
                             activeIndex: ref.watch(currentPageProvider),
@@ -272,7 +253,6 @@ class _PondHomeState extends ConsumerState<PondHome> {
                                 : pond.ink,
                           ),
 
-                          // Log dock.
                           _LogDock(
                             apps: layoutAsync.maybeWhen(
                               data: (l) => l.dock,
@@ -291,11 +271,9 @@ class _PondHomeState extends ConsumerState<PondHome> {
                     ),
                   ),
 
-                  // ---- The mouth showcase drawer (screen 13) ----
                   if (drawerOpen)
                     const TickerMode(enabled: true, child: MouthDrawer()),
 
-                  // ---- Long-press menu ----
                   if (_menu != null)
                     ContextMenuLayer(
                       request: _menu!,
@@ -310,8 +288,6 @@ class _PondHomeState extends ConsumerState<PondHome> {
     );
   }
 
-  /// Pond pages 2+ reuse the sketchbook pages' plain apps (folders stay
-  /// home-only in this stage).
   List<AppEntry> _flatPondApps(HomeLayout layout, int pageIndex) {
     final page = layout.pages.elementAtOrNull(pageIndex) ?? const <HomeCell>[];
     return [
@@ -321,7 +297,6 @@ class _PondHomeState extends ConsumerState<PondHome> {
   }
 }
 
-/// Chunk a flat page into rows of 3 pads.
 List<List<AppEntry>> _chunk(List<AppEntry>? apps, int size) {
   if (apps == null) return const [];
   final out = <List<AppEntry>>[];
@@ -383,7 +358,6 @@ class _PondRows extends StatelessWidget {
   }
 }
 
-/// Pad bob — 4.8 s, phase-offset per pad, transform-only.
 class _PadBob extends StatelessWidget {
   const _PadBob({
     required this.elapsed,
@@ -403,7 +377,6 @@ class _PadBob extends StatelessWidget {
       animation: elapsed,
       builder: (context, _) {
         final t = elapsed.value.inMicroseconds / 1e6;
-        // 4.8 s loop; each pad owns a phase slice of it.
         final phase =
             ((t + phaseIndex * 0.8) / ToadMotion.padBob.inMicroseconds / 1e6)
                 .clamp(0, 1);
@@ -447,7 +420,6 @@ class _PadCellState extends ConsumerState<_PadCell>
   @override
   void initState() {
     super.initState();
-    // Hop — 320 ms arc, "single sprite translate + squash".
     _hop = AnimationController(vsync: this, duration: ToadMotion.hop, value: 0);
   }
 
@@ -463,7 +435,6 @@ class _PadCellState extends ConsumerState<_PadCell>
       behavior: HitTestBehavior.opaque,
       onTap: widget.onTap,
       onLongPressStart: (details) {
-        // The hop accompanies the long-press (gesture map, screen 11).
         _hop.forward(from: 0);
         widget.onLongPress(details.globalPosition);
       },
@@ -527,8 +498,6 @@ class _PadCellState extends ConsumerState<_PadCell>
   }
 }
 
-/// The resident — blinks on the ambient schedule, croaks (900 ms, once)
-/// when tapped, and wakes grumpily before sunrise.
 class _ResidentPadCell extends ConsumerStatefulWidget {
   const _ResidentPadCell({required this.pond, required this.elapsed});
 
@@ -549,7 +518,7 @@ class _ResidentPadCellState extends ConsumerState<_ResidentPadCell>
     super.initState();
     _croak = AnimationController(
       vsync: this,
-      duration: ToadMotion.croak, // 900 ms, plays once
+      duration: ToadMotion.croak,
     );
   }
 
@@ -560,7 +529,6 @@ class _ResidentPadCellState extends ConsumerState<_ResidentPadCell>
   }
 
   void _pat() {
-    // Night tap: "he blinks awake with a grumpy croak."
     if (widget.pond.isNight && !_awakeOverride) {
       setState(() => _awakeOverride = true);
       Future<void>.delayed(const Duration(seconds: 6), () {
@@ -586,7 +554,6 @@ class _ResidentPadCellState extends ConsumerState<_ResidentPadCell>
               animation: Listenable.merge([widget.elapsed, _croak]),
               builder: (context, _) {
                 final t = widget.elapsed.value.inMicroseconds / 1e6;
-                // Toad bob — 5.4 s day, slower (7.6 s) asleep.
                 final period = asleep ? 7.6 : 5.4;
                 final phase = (t / period) % 1;
                 final amp = asleep ? 2.0 : 3.0;
@@ -612,7 +579,6 @@ class _ResidentPadCellState extends ConsumerState<_ResidentPadCell>
                             grumpy: _awakeOverride && pond.isNight,
                           ),
                         ),
-                        // Drifting z's while asleep.
                         if (asleep)
                           Positioned(
                             right: -4,
@@ -643,7 +609,6 @@ class _ResidentPadCellState extends ConsumerState<_ResidentPadCell>
   }
 }
 
-/// Drifting z's at night — three Caveat z's on staggered 4.5 s loops.
 class _DriftingZs extends StatelessWidget {
   const _DriftingZs({required this.elapsed, required this.color});
 
@@ -727,7 +692,6 @@ class _ClockReflection extends StatelessWidget {
   }
 }
 
-/// Log dock — wooden gradient + grain overlay, replaces the frosted dock.
 class _LogDock extends StatelessWidget {
   const _LogDock({
     required this.apps,
@@ -819,7 +783,6 @@ class _LogDock extends StatelessWidget {
   }
 }
 
-/// Wood gradient + grain stripes + edge highlights painted over the dock.
 class _LogGrainPainter extends CustomPainter {
   _LogGrainPainter({required this.pond});
 
@@ -833,7 +796,6 @@ class _LogGrainPainter extends CustomPainter {
       const Radius.circular(ToadRadii.dock),
     );
 
-    // Wood body: 180deg #8A6242 → #6E4C33 58% → #5B3D2A.
     canvas.drawRRect(
       rrect,
       Paint()
@@ -845,7 +807,6 @@ class _LogGrainPainter extends CustomPainter {
         ).createShader(rect),
     );
 
-    // Grain: repeating 2px/9px stripes.
     canvas.save();
     canvas.clipRRect(rrect);
     final grain = Paint()..color = Colors.black.withValues(alpha: 0.5);
@@ -860,7 +821,6 @@ class _LogGrainPainter extends CustomPainter {
     }
     canvas.restore();
 
-    // Inset top highlight / bottom shadow.
     canvas.drawRRect(
       rrect,
       Paint()

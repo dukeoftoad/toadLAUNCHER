@@ -1,4 +1,3 @@
-/// Hero clock formatting + demo repository contract tests.
 library;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -138,7 +137,7 @@ void main() {
       final layout = await repo.loadHomeLayout();
       final media = layout.folders.firstWhere((f) => f.id == 'media');
       expect(media.title, 'Media');
-      expect(media.apps.length, 8); // 8 apps + Add-app slot rendered by UI
+      expect(media.apps.length, 8);
     });
 
     test('launch is a safe no-op in demo mode', () async {

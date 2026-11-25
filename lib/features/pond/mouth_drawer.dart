@@ -1,17 +1,3 @@
-/// The mouth showcase drawer — screen 13, "the drawer is the toad".
-///
-/// Signature moment: swiping up on the log, the resident leaps to the
-/// bottom of the screen and opens his mouth wide — the app drawer is the
-/// maw. The bulging eyes peek over the jaw and blink while you browse.
-///
-///   · the tongue is the search bar — "what fly do you seek?"
-///   · a 4-column icon grid on the deep moss interior; it scrolls inside
-///     the mouth; the A–Z rail hugs the jaw's right edge for quick jumps
-///   · it tracks your finger: drag opens 0→100%; release below 40% and it
-///     swallows shut (260 ms) with a gulp bounce and a satisfied blink;
-///     pull past the top and it hiccups a bubble
-///   · same app index and search logic as the sketchbook drawer — only the
-///     stage changes
 library;
 
 import 'dart:math' as math;
@@ -28,11 +14,10 @@ import '../../shared/widgets/toad_app_icon.dart';
 import '../home/home_controller.dart';
 import 'pond_ambient.dart' show PondAmbient, PondTickerProvider, blinkAt;
 
-/// Maw furniture tokens (from the proposal's CSS, screen 13).
 abstract final class MawColors {
-  static const scrimTop = Color(0x6B0A1414); // rgba(10,26,20,.42)
-  static const scrimMid = Color(0x9E06120E); // rgba(6,18,14,.62)
-  static const scrimEnd = Color(0xB8040C0A); // rgba(4,12,10,.72)
+  static const scrimTop = Color(0x6B0A1414);
+  static const scrimMid = Color(0x9E06120E);
+  static const scrimEnd = Color(0xB8040C0A);
   static const domeTop = Color(0xFF67A052);
   static const domeBottom = Color(0xFF4E7F3E);
   static const bumpCenter = Color(0xFF71A85C);
@@ -66,7 +51,6 @@ class MouthDrawer extends ConsumerStatefulWidget {
 class _MouthDrawerState extends ConsumerState<MouthDrawer> {
   final PondTickerProvider _vsync = PondTickerProvider();
 
-  /// Openness 0→1 — "drag-tracked, not timed".
   late final AnimationController _open;
   late final AnimationController _swallow;
   late final AnimationController _hiccup;
@@ -77,21 +61,19 @@ class _MouthDrawerState extends ConsumerState<MouthDrawer> {
   double _overpull = 0;
   bool _hiccups = false;
 
-  /// The satisfied blink right after the swallow.
   bool _satisfiedBlink = false;
   DateTime _satisfiedUntil = DateTime.now();
 
-  /// The 40% swallow threshold from the proposal.
   static const double _swallowThreshold = 0.4;
 
   @override
   void initState() {
     super.initState();
     _open = AnimationController(vsync: _vsync, value: 0.06)
-      ..duration = ToadMotion.mouthOpen; // 380 ms
+      ..duration = ToadMotion.mouthOpen;
     _swallow = AnimationController(
       vsync: _vsync,
-      duration: ToadMotion.swallow, // 260 ms
+      duration: ToadMotion.swallow,
     );
     _hiccup = AnimationController(
       vsync: _vsync,
@@ -100,7 +82,6 @@ class _MouthDrawerState extends ConsumerState<MouthDrawer> {
     _search.addListener(() {
       if (_query != _search.text) setState(() => _query = _search.text);
     });
-    // The initial swipe-up opens the mouth wide.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _open.forward();
     });
@@ -122,8 +103,6 @@ class _MouthDrawerState extends ConsumerState<MouthDrawer> {
     _swallowShut();
   }
 
-  /// "release below 40% and it swallows shut (260 ms) with a gulp bounce
-  /// and a satisfied blink".
   void _swallowShut() {
     _satisfiedBlink = true;
     _satisfiedUntil = DateTime.now().add(const Duration(milliseconds: 700));
@@ -201,8 +180,6 @@ class _MouthDrawerState extends ConsumerState<MouthDrawer> {
               final o = _open.value;
               final gulp = 1 + 0.06 * math.sin(_swallow.value * math.pi);
 
-              // The maw slides up with openness; 1 = seated at the mockup
-              // position (head top 196 of 786).
               const mawTopRef = 196.0;
               final restOffset = size.height * 0.92;
               final seatedTop =
@@ -212,7 +189,6 @@ class _MouthDrawerState extends ConsumerState<MouthDrawer> {
               return Stack(
                 fit: StackFit.expand,
                 children: [
-                  // Scrim — tap the palate to close.
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: _swallowShut,
@@ -243,7 +219,6 @@ class _MouthDrawerState extends ConsumerState<MouthDrawer> {
                     ),
                   ),
 
-                  // Drag hint while the finger leads the mouth.
                   if (o < 0.985)
                     Positioned(
                       top: size.height * 0.19,
@@ -263,8 +238,6 @@ class _MouthDrawerState extends ConsumerState<MouthDrawer> {
                       ),
                     ),
 
-                  // The head + maw column — the mouth tracks your finger
-                  // over its whole surface, not just the backdrop.
                   Transform.translate(
                     offset: Offset(0, dy),
                     child: Transform.scale(
@@ -282,7 +255,6 @@ class _MouthDrawerState extends ConsumerState<MouthDrawer> {
                         child: Column(
                           children: [
                             SizedBox(height: seatedTop - 120),
-                            // Head — dome + blinking eyes peek over the jaw.
                             PondAmbient(
                               builder: (context, elapsed) => _MawHead(
                                 elapsed: elapsed,
@@ -290,7 +262,6 @@ class _MouthDrawerState extends ConsumerState<MouthDrawer> {
                                 extraBlinkUntil: _satisfiedUntil,
                               ),
                             ),
-                            // The maw itself.
                             Expanded(
                               child: Container(
                                 margin: const EdgeInsets.fromLTRB(
@@ -333,8 +304,6 @@ class _MouthDrawerState extends ConsumerState<MouthDrawer> {
                                   children: [
                                     Column(
                                       children: [
-                                        // Upper lip — rides over the maw's
-                                        // top edge (lifted via transform).
                                         Transform.translate(
                                           offset: const Offset(0, -12),
                                           child: Container(
@@ -357,14 +326,12 @@ class _MouthDrawerState extends ConsumerState<MouthDrawer> {
                                             ),
                                           ),
                                         ),
-                                        // Tongue — the search bar.
                                         _TongueSearch(
                                           controller: _search,
                                           hintColor: MawColors.tongueInk,
                                           cursor: pond.appLabel,
                                         ),
                                         const SizedBox(height: 14),
-                                        // Showcase grid — scrolls inside.
                                         Expanded(
                                           child: GridView.builder(
                                             controller: _grid,
@@ -388,7 +355,6 @@ class _MouthDrawerState extends ConsumerState<MouthDrawer> {
                                         ),
                                       ],
                                     ),
-                                    // A–Z rail on the jaw's right edge.
                                     Positioned(
                                       right: -12,
                                       top: 76,
@@ -416,7 +382,6 @@ class _MouthDrawerState extends ConsumerState<MouthDrawer> {
                     ),
                   ),
 
-                  // Hiccup bubble — "pull past the top and it hiccups".
                   if (_hiccups)
                     AnimatedBuilder(
                       animation: _hiccup,
@@ -471,7 +436,6 @@ class _MouthDrawerState extends ConsumerState<MouthDrawer> {
   }
 }
 
-/// Dome + two bulging eyes — the blink loop rides the ambient clock.
 class _MawHead extends StatelessWidget {
   const _MawHead({
     required this.elapsed,
@@ -509,7 +473,6 @@ class _MawHeadPainter extends CustomPainter {
 
   final bool blinking;
 
-  /// The swallow's contented blink — eyes curve the happy way.
   final bool satisfied;
 
   @override
@@ -517,7 +480,6 @@ class _MawHeadPainter extends CustomPainter {
     final w = size.width;
     final k = w / 352;
 
-    // Dome — 330 wide, top 26.
     final domeRect = Rect.fromLTWH((w - 330 * k) / 2, 26 * k, 330 * k, 110 * k);
     canvas.drawRRect(
       RRect.fromLTRBAndCorners(
@@ -536,7 +498,6 @@ class _MawHeadPainter extends CustomPainter {
         ).createShader(domeRect),
     );
 
-    // Eyes — 78x64 bumps at 50%-130 / 50%+52.
     final eyeW = 78 * k;
     final eyeH = 64 * k;
     final leftCx = w / 2 - 130 * k + eyeW / 2;
@@ -561,8 +522,6 @@ class _MawHeadPainter extends CustomPainter {
       final ballR = 17 * k;
       final ballC = Offset(cx, eyeH - 16 * k - ballR + 8 * k);
       if (blinking) {
-        // Two-frame eyelid swap — a relaxed curved lid (happy arc when
-        // the swallow was satisfying).
         final lid = Paint()
           ..color = MawColors.bumpEdge
           ..strokeWidth = 3.4 * k
@@ -604,8 +563,6 @@ class _MawHeadPainter extends CustomPainter {
       oldDelegate.blinking != blinking || oldDelegate.satisfied != satisfied;
 }
 
-/// The tongue is the search bar — pink pill, magnifier glyph, "what fly do
-/// you seek?".
 class _TongueSearch extends StatelessWidget {
   const _TongueSearch({
     required this.controller,
@@ -697,7 +654,6 @@ class _MagnifierGlyph extends CustomPainter {
   bool shouldRepaint(_MagnifierGlyph oldDelegate) => oldDelegate.color != color;
 }
 
-/// One app inside the maw — grid icon + pale label with shadow.
 class _MawApp extends StatelessWidget {
   const _MawApp({required this.app, required this.onTap});
 
@@ -731,7 +687,6 @@ class _MawApp extends StatelessWidget {
   }
 }
 
-/// The A–Z rail hugging the jaw's right edge.
 class _AzRail extends StatelessWidget {
   const _AzRail({
     required this.apps,

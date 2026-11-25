@@ -1,14 +1,3 @@
-/// Edit / resize mode — screen 7 of the proposal.
-///
-/// "Long-press + Edit home screen (or pinch) reveals the grid skeleton so
-/// moves and resizes feel precise instead of guessy."
-///
-///   · faint grid lines (12% ink) show the real 4-column cells — honest
-///   · the selected widget wears a dashed toad-green outline with 4 corner
-///     handles; drag corners to resize 2×1 … 4×4, the clock re-renders live
-///   · the hint bubble teaches the gesture once, then never again
-///   · bottom strip: Wallpapers · Widgets · Settings — one tap each
-///   · Done pill (or back) exits; every action ends with an undoable toast
 library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -21,10 +10,8 @@ import '../../core/theme/toad_tokens.dart';
 import '../../shared/widgets/placed_widgets.dart';
 import '../home/home_controller.dart';
 
-/// Visual row pitch used to map resize drags onto spans.
 const double _kResizeRowPitch = 68;
 
-/// Faint grid lines — the real 4-column cells plus the honest row pitch.
 class GridSkeletonPainter extends CustomPainter {
   GridSkeletonPainter({required this.color});
 
@@ -56,7 +43,6 @@ class GridSkeletonPainter extends CustomPainter {
       oldDelegate.color != color;
 }
 
-/// Dashed toad-green outline around the selected widget.
 class DashedSelectionPainter extends CustomPainter {
   DashedSelectionPainter({required this.color, this.radius = 14});
 
@@ -90,9 +76,6 @@ class DashedSelectionPainter extends CustomPainter {
       oldDelegate.color != color || oldDelegate.radius != radius;
 }
 
-/// The per-page widget stack. Normal mode renders the engines; edit mode
-/// wraps the selected widget in the dashed outline + resize handles and
-/// lets the body be dragged to reorder.
 class WidgetZone extends ConsumerWidget {
   const WidgetZone({
     super.key,
@@ -104,7 +87,6 @@ class WidgetZone extends ConsumerWidget {
   final int pageIndex;
   final MemoryCardData? memory;
 
-  /// Gesture map: tap on the clock area opens the Clock app.
   final VoidCallback onClockTap;
 
   @override
@@ -164,8 +146,6 @@ class WidgetZone extends ConsumerWidget {
   }
 }
 
-/// One placed widget + its edit-mode chrome. Stateful because resize drags
-/// accumulate pixel deltas against the span captured at gesture start.
 class _WidgetSlot extends ConsumerStatefulWidget {
   const _WidgetSlot({
     super.key,
@@ -205,8 +185,6 @@ class _WidgetSlotState extends ConsumerState<_WidgetSlot> {
   int _baseH = 1;
   double _moveTotal = 0;
 
-  // -- resize ----------------------------------------------------------------
-
   void _onResizePanStart() {
     _snapshot = ref.read(homeLayoutProvider.notifier).snapshot();
     _resizeTotal = Offset.zero;
@@ -232,8 +210,6 @@ class _WidgetSlotState extends ConsumerState<_WidgetSlot> {
         );
     _snapshot = null;
   }
-
-  // -- move (reorder within the page stack) ----------------------------------
 
   void _onMovePanStart() {
     _snapshot = ref.read(homeLayoutProvider.notifier).snapshot();
@@ -298,7 +274,6 @@ class _WidgetSlotState extends ConsumerState<_WidgetSlot> {
                 ),
               ),
             ),
-          // Corner handles — clock only ("the clock re-renders live").
           if (widget.selected && w.kind == WidgetKind.clock) ...[
             _Handle(
               corner: _Corner.topLeft,
@@ -359,7 +334,6 @@ class _WidgetSlotState extends ConsumerState<_WidgetSlot> {
 
 enum _Corner { topLeft, topRight, bottomLeft, bottomRight }
 
-/// Corner resize handle (15 px sketchbook ring).
 class _Handle extends StatelessWidget {
   const _Handle({
     required this.corner,
@@ -405,8 +379,6 @@ class _Handle extends StatelessWidget {
   }
 }
 
-/// Edit-mode bottom strip — "Wallpapers · Widgets · Settings, one tap each"
-/// plus the Done pill. Replaces the dock while editing.
 class EditBottomStrip extends StatelessWidget {
   const EditBottomStrip({
     super.key,
@@ -541,8 +513,6 @@ class _StripItem extends StatelessWidget {
   }
 }
 
-/// The once-only hint bubble: "teaches the gesture once, then never again
-/// (persisted dismiss)".
 class EditHintBubble extends ConsumerWidget {
   const EditHintBubble({super.key});
 

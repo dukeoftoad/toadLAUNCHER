@@ -1,11 +1,3 @@
-/// Sketchbook wallpaper glow — the three radial washes behind every
-/// sketchbook skin (Light / Dark / AMOLED), per proposal section 2.
-///
-/// Light:  rgba(122,166,84,.16) @ 88%/6%  (140x110)
-///         rgba(201,162,39,.10) @ 8%/40%  (200x160)
-///         rgba(79,122,56,.14)  @ 90%/92% (220x220)
-/// Dark:   rgba(147,196,109,.10) @ 88%/8%  · gold .06 @ 6%/60% · .10 @ 92%/94%
-/// AMOLED: rgba(147,196,109,.09) @ 88%/8%  · .08 @ 92%/94%
 library;
 
 import 'package:material_ui/material_ui.dart';
@@ -37,10 +29,9 @@ class WallpaperGlowPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final s = data.skin;
     if (s == ResolvedSkin.pondDay || s == ResolvedSkin.pondNight) {
-      return; // Pond replaces glow with scene lighting.
+      return;
     }
 
-    // Reference surface scaling.
     final k = size.width / ToadMetrics.referenceScreen.width;
     final strength = data.palette.wallpaperGlowStrength;
 
@@ -107,7 +98,6 @@ class WallpaperGlowPainter extends CustomPainter {
         color: const Color(0xFF93C46D).withValues(alpha: 0.10),
       );
     } else {
-      // AMOLED.
       radial(
         center: const Alignment(0.76, -0.84),
         rx: 150,

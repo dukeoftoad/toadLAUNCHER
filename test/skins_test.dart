@@ -1,4 +1,3 @@
-/// Skin resolution tests — the theme engine's decision table.
 library;
 
 import 'dart:ui' show Brightness;
@@ -60,7 +59,6 @@ void main() {
   });
 
   test('pond night from sunset anchor onward', () {
-    // Exactly 19:30 — night falls.
     expect(
       resolve(pondPro: true, now: DateTime(2026, 11, 24, 19, 30)),
       ResolvedSkin.pondNight,

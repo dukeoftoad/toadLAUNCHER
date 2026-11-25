@@ -1,4 +1,3 @@
-/// Stage 2 feature tests — drawer, search, recents, folders, context menu.
 library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -28,12 +27,10 @@ Future<void> pumpHome(WidgetTester tester, {bool pondPro = false}) async {
       ),
     ),
   );
-  // The pond's ambient loop never settles — pump fixed steps instead.
   await tester.pump();
   await tester.pump(const Duration(seconds: 1));
 }
 
-/// Open the drawer through the dock handle.
 Future<void> openDrawer(WidgetTester tester) async {
   await tester.tap(find.text('APPS'));
   await tester.pumpAndSettle(const Duration(milliseconds: 400));
@@ -45,7 +42,6 @@ void main() {
     (tester) async {
       await pumpHome(tester);
 
-      // Badges are off by default (screen 10); this user turned them on.
       final container = ProviderScope.containerOf(
         tester.element(find.byType(HomeScreen)),
       );
@@ -55,20 +51,16 @@ void main() {
       await openDrawer(tester);
 
       expect(find.text('Search apps'), findsOneWidget);
-      expect(find.text('A'), findsOneWidget); // Caveat section letters
+      expect(find.text('A'), findsOneWidget);
       expect(find.text('B'), findsOneWidget);
-      // The pinned toadLIST row (v0.12) pushes the C section below the
-      // fold — scroll the A–Z index to it like a real user would.
       await tester.scrollUntilVisible(
         find.text('C'),
         80,
         scrollable: find.byType(Scrollable).last,
       );
       expect(find.text('C'), findsOneWidget);
-      // Recents seeded from the repo (toadGALLERY also lives on the grid).
       expect(find.text('toadGALLERY'), findsWidgets);
 
-      // Contacts sits below the fold — scroll the index to it.
       await tester.scrollUntilVisible(
         find.text('2 missed'),
         80,
@@ -84,34 +76,28 @@ void main() {
     await pumpHome(tester, pondPro: true);
     await tester.pump(const Duration(milliseconds: 400));
 
-    // On the pond this opens the maw (openDrawer settles forever there).
     await tester.tap(find.text('APPS'));
-    await tester.pump(const Duration(milliseconds: 500)); // mount + forward
-    await tester.pump(const Duration(milliseconds: 380)); // tick 1 (anchor)
-    await tester.pump(const Duration(milliseconds: 380)); // open completes
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 380));
+    await tester.pump(const Duration(milliseconds: 380));
 
-    // The maw is seated: tongue search, showcase grid, A-Z rail.
     expect(find.text('what fly do you seek?'), findsOneWidget);
-    expect(find.text('Phone'), findsWidgets); // dock + maw grid
-    expect(find.text('A'), findsOneWidget); // rail letters
-    // The drag hint retires once the mouth is fully open.
+    expect(find.text('Phone'), findsWidgets);
+    expect(find.text('A'), findsOneWidget);
     expect(
       find.text('pull up to open wider · release to swallow'),
       findsNothing,
     );
 
-    // Tongue search filters the showcase grid.
     await tester.enterText(find.byType(TextField), 'clo');
     await tester.pump(const Duration(milliseconds: 300));
-    expect(find.text('Clock'), findsWidgets); // maw result
+    expect(find.text('Clock'), findsWidgets);
     expect(find.text('Alarm'), findsNothing);
 
-    // Drag the mouth mostly shut and release below 40% — it swallows
-    // (260 ms) with the gulp bounce, exactly like the proposal's drawer.
     await tester.dragFrom(const Offset(60, 80), const Offset(0, 340));
-    await tester.pump(const Duration(milliseconds: 100)); // release → swallow
-    await tester.pump(const Duration(milliseconds: 260)); // anchor tick
-    await tester.pump(const Duration(milliseconds: 260)); // shut + unmount
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pump(const Duration(milliseconds: 260));
+    await tester.pump(const Duration(milliseconds: 260));
     await tester.pump(const Duration(milliseconds: 100));
     expect(find.text('what fly do you seek?'), findsNothing);
   });
@@ -123,10 +109,9 @@ void main() {
     await tester.enterText(find.byType(TextField), 'clo');
     await tester.pump();
 
-    // One result row + the Clock still on the home grid behind the drawer.
     expect(find.text('Clock'), findsNWidgets(2));
     expect(find.text('Alarm'), findsNothing);
-    expect(find.text('A'), findsNothing); // letters hidden while searching
+    expect(find.text('A'), findsNothing);
 
     await tester.enterText(find.byType(TextField), '');
     await tester.pump();
@@ -149,11 +134,6 @@ void main() {
     await pumpHome(tester);
     await openDrawer(tester);
 
-    // Fling down on a recents tile (inside the header gesture zone) — a
-    // real velocity so primaryVelocity clears the 120 threshold. The
-    // drawer tree holds three "toadGALLERY" texts: the home icon behind
-    // the sheet, the recents tile, and the family-section row — `.at(1)`
-    // is the recents tile inside the header zone.
     await tester.fling(
       find.text('toadGALLERY').at(1),
       const Offset(0, 160),
@@ -174,7 +154,7 @@ void main() {
     await tester.pumpAndSettle(const Duration(milliseconds: 300));
 
     expect(find.text('App info'), findsOneWidget);
-    expect(find.text('Remove'), findsNothing); // drawer shows everything
+    expect(find.text('Remove'), findsNothing);
   });
 
   group('HomeController mutations', () {
@@ -216,12 +196,11 @@ void main() {
       await seeded(container);
       final notifier = container.read(homeLayoutProvider.notifier);
 
-      notifier.removePageCell(0, 1); // Phone
+      notifier.removePageCell(0, 1);
       var layout = container.read(homeLayoutProvider).value!;
       expect(layout.pages[0].length, 7);
       expect(layout.pages.length, 3);
 
-      // Remove every app of page 3 → the page disappears.
       for (var i = layout.pages[2].length - 1; i >= 0; i--) {
         notifier.removePageCell(2, i);
       }
@@ -269,7 +248,6 @@ void main() {
         expect(layout.folderById('media')!.apps.length, 7);
         expect((layout.pages[1].first as FolderCell).folder.apps.length, 7);
 
-        // Drain the whole folder → the tile leaves the page.
         for (final app in layout.folderById('media')!.apps.toList()) {
           notifier.removeAppFromFolder('media', app.id);
         }
@@ -298,8 +276,8 @@ void main() {
     await tester.tap(find.text('Remove'));
     await tester.pumpAndSettle(const Duration(milliseconds: 400));
 
-    expect(find.text('Phone'), findsNothing); // gone from page 1
-    expect(find.text('Uninstall…'), findsNothing); // menu dismissed
+    expect(find.text('Phone'), findsNothing);
+    expect(find.text('Uninstall…'), findsNothing);
     expect(find.text('Removed "Phone" from this page'), findsOneWidget);
   });
 
@@ -320,13 +298,12 @@ void main() {
     await tester.tap(find.text('Keep it'));
     await tester.pumpAndSettle();
 
-    expect(find.text('App info'), findsOneWidget); // back to the items
+    expect(find.text('App info'), findsOneWidget);
   });
 
   testWidgets('empty-space long-press shows the smaller menu', (tester) async {
     await pumpHome(tester);
 
-    // Long-press the hero date — empty space with no child recognizers.
     await tester.longPress(find.text('Tuesday · 24 November'));
     await tester.pumpAndSettle(const Duration(milliseconds: 300));
 
@@ -339,30 +316,27 @@ void main() {
   ) async {
     await pumpHome(tester);
 
-    // Swipe to page 2 where the Media folder tile leads the grid.
     await tester.drag(find.text('Clock'), const Offset(-420, 0));
     await tester.pumpAndSettle(const Duration(milliseconds: 400));
 
     await tester.tap(find.text('Media'));
     await tester.pumpAndSettle(const Duration(milliseconds: 400));
 
-    expect(find.text('toadPLAYER'), findsOneWidget); // folder content
+    expect(find.text('toadPLAYER'), findsOneWidget);
     expect(find.text('Add app'), findsOneWidget);
     expect(
       find.text('8 apps · long-press an icon to drag out'),
       findsOneWidget,
     );
 
-    // Tap the Caveat title → inline rename.
     await tester.tap(find.text('Media').last);
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), 'Pond media');
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
 
-    expect(find.text('Pond media'), findsWidgets); // card title updated
+    expect(find.text('Pond media'), findsWidgets);
 
-    // Tap-outside (scrim above the card) closes.
     await tester.tapAt(const Offset(400, 30));
     await tester.pumpAndSettle(const Duration(milliseconds: 400));
     expect(find.text('Add app'), findsNothing);

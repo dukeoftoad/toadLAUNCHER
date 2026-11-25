@@ -1,5 +1,3 @@
-/// Dock — 4 app slots + the drawer handle ("APPS" chevron). Frosted pill:
-/// translucent surface + blur (14px backdrop blur in the proposal).
 library;
 
 import 'dart:ui' show ImageFilter;
@@ -31,11 +29,8 @@ class DockBar extends StatelessWidget {
   final VoidCallback onDrawerTap;
   final void Function(AppEntry app)? onAppLongPress;
 
-  /// "Swipe down in dock area — opens search instead of notifications"
-  /// (opt-in switch). Fires on a downward fling across the dock.
   final VoidCallback? onSwipeDown;
 
-  /// Pond variant overrides (log dock handles its own look).
   final Color? frostColor;
   final Color? borderColors;
   final Color? arrowColor;

@@ -1,7 +1,3 @@
-/// Home screen state — loads the app index, tracks the visible page and
-/// applies layout mutations (recents, remove, folder rename) plus the
-/// stage-3 widget engine (place / resize / move / undo) and the v0.11
-/// real-widget engine (AppWidgetHost placements that survive restarts).
 library;
 
 import 'dart:async';
@@ -19,22 +15,17 @@ import '../../core/settings/launcher_settings.dart';
 
 const String _kHostedWidgetsKey = 'toadlauncher.hosted.widgets.v1';
 
-/// Async home layout from the repository (demo-seeded for this alpha).
 final AsyncNotifierProvider<HomeController, HomeLayout> homeLayoutProvider =
     AsyncNotifierProvider<HomeController, HomeLayout>(HomeController.new);
 
 class HomeController extends AsyncNotifier<HomeLayout> {
-  /// Undo history — one snapshot per action ("every move is undoable").
   final List<({HomeLayout layout, LauncherSettings settings})> _undoStack = [];
 
   @override
   Future<HomeLayout> build() async {
-    // Watched: flipping Device/Demo in settings rebuilds the home from the
-    // newly active repository.
     final repo = ref.watch(appRepositoryProvider);
     final layout = await repo.loadHomeLayout();
 
-    // Device mode: publish the real adaptive icons for the tile renderer.
     if (repo is DeviceAppRepository) {
       ref.read(deviceIconsProvider.notifier).state = Map<String, Uint8List>.of(
         repo.iconBytes,
@@ -42,9 +33,6 @@ class HomeController extends AsyncNotifier<HomeLayout> {
     }
     final settings = ref.read(launcherSettingsProvider);
 
-    // The Caveat clock is the hero widget — seeded on page 0 unless the
-    // demo layout already carries one. Its span follows the persisted
-    // settings (the resized size survives restarts).
     final seeded = <PlacedWidget>[];
     if (!layout.widgets.any((w) => w.kind == WidgetKind.clock)) {
       seeded.add(
@@ -57,9 +45,6 @@ class HomeController extends AsyncNotifier<HomeLayout> {
         ),
       );
     }
-    // toadGALLERY's Memories strip is the featured widget of the toad
-    // family — it appears only when the gallery is installed (demo id or
-    // the real package id from device mode).
     final galleryInstalled = layout.allApps.any(
       (a) => a.id == 'family.toad.gallery' || a.id == 'com.toadgallery.app',
     );
@@ -76,8 +61,6 @@ class HomeController extends AsyncNotifier<HomeLayout> {
       );
     }
 
-    // Real Android widgets (AppWidgetHost ids survive restarts — the OS
-    // keeps the binding as long as we never delete the id).
     final hosted = await _restoreHosted();
 
     if (seeded.isEmpty) {
@@ -90,14 +73,12 @@ class HomeController extends AsyncNotifier<HomeLayout> {
     ]);
   }
 
-  /// Launch through the repository, then feed the drawer recents row.
   Future<void> launch(AppEntry app) async {
     final repo = ref.read(appRepositoryProvider);
     await repo.launch(app);
     recordLaunch(app);
   }
 
-  /// "Recents row: last 4 launched apps" — newest first, deduped.
   void recordLaunch(AppEntry app) {
     final current = state.value;
     if (current == null) return;
@@ -108,8 +89,6 @@ class HomeController extends AsyncNotifier<HomeLayout> {
     state = AsyncData(current.copyWith(recents: recents));
   }
 
-  /// Remove a tile from one page ("Remove takes the icon off this page
-  /// only"). A page left empty disappears; the page count follows.
   void removePageCell(int pageIndex, int cellIndex) {
     final current = state.value;
     if (current == null) return;
@@ -126,7 +105,6 @@ class HomeController extends AsyncNotifier<HomeLayout> {
     state = AsyncData(current.copyWith(pages: pages));
   }
 
-  /// Pull an app out of the dock.
   void removeFromDock(String appId) {
     final current = state.value;
     if (current == null) return;
@@ -135,7 +113,6 @@ class HomeController extends AsyncNotifier<HomeLayout> {
     );
   }
 
-  /// Inline folder rename — patches both the folders list and the tile.
   void renameFolder(String folderId, String title) {
     final clean = title.trim();
     if (clean.isEmpty) return;
@@ -159,8 +136,6 @@ class HomeController extends AsyncNotifier<HomeLayout> {
     state = AsyncData(current.copyWith(pages: pages, folders: folders));
   }
 
-  /// Remove one app from inside a folder. A folder that runs empty comes
-  /// off the page — folders are only a way to group apps.
   void removeAppFromFolder(String folderId, String appId) {
     final current = state.value;
     if (current == null) return;
@@ -182,7 +157,7 @@ class HomeController extends AsyncNotifier<HomeLayout> {
           for (final cell in page)
             if (cell is FolderCell && cell.folder.id == folderId)
               (updated == null || updated.apps.isEmpty)
-                  ? null // empty folder leaves the page
+                  ? null
                   : FolderCell(updated)
             else
               cell,
@@ -192,11 +167,6 @@ class HomeController extends AsyncNotifier<HomeLayout> {
     state = AsyncData(current.copyWith(pages: pages, folders: folders));
   }
 
-  // -------------------------------------------------------------------------
-  // Stage 3 — widget engine (place / resize / move / undo)
-  // -------------------------------------------------------------------------
-
-  /// Default spans per kind; the clock follows the persisted settings span.
   static int _defaultW(WidgetKind kind, LauncherSettings settings) =>
       switch (kind) {
         WidgetKind.clock => settings.clockSpanW,
@@ -215,16 +185,12 @@ class HomeController extends AsyncNotifier<HomeLayout> {
         WidgetKind.androidHosted => 2,
       };
 
-  /// Capture the pre-action state. Call once at the start of a gesture;
-  /// pass the snapshot to [commitAction] when the gesture ends.
   ({HomeLayout layout, LauncherSettings settings})? snapshot() {
     final layout = state.value;
     if (layout == null) return null;
     return (layout: layout, settings: ref.read(launcherSettingsProvider));
   }
 
-  /// Register a finished action: push its snapshot onto the undo stack and
-  /// surface the toast with an Undo pill.
   void commitAction(
     ({HomeLayout layout, LauncherSettings settings})? snap, {
     String? message,
@@ -261,7 +227,6 @@ class HomeController extends AsyncNotifier<HomeLayout> {
     return true;
   }
 
-  /// Roll the last action back and confirm with a calm toast.
   void undo() {
     if (_undoStack.isEmpty) return;
     final entry = _undoStack.removeLast();
@@ -272,9 +237,6 @@ class HomeController extends AsyncNotifier<HomeLayout> {
 
   bool get canUndo => _undoStack.isNotEmpty;
 
-  /// Place a widget from the picker. One of each local kind — the picker
-  /// already explains that honestly, this is the guard. Hosted widgets
-  /// are not limited: a home can carry as many real widgets as fit.
   bool placeWidget(WidgetKind kind, {required int page, int? index}) {
     final current = state.value;
     if (current == null) return false;
@@ -304,8 +266,6 @@ class HomeController extends AsyncNotifier<HomeLayout> {
     return true;
   }
 
-  /// Remove a placed widget (edit mode long-press menu / picker swap).
-  /// Hosted Android widgets also release their AppWidgetHost id.
   void removeWidget(String id, {String? message}) {
     final current = state.value;
     if (current == null) return;
@@ -327,11 +287,6 @@ class HomeController extends AsyncNotifier<HomeLayout> {
     commitAction(snap, message: message ?? 'Widget removed');
   }
 
-  // -----------------------------------------------------------------------
-  // v0.11 — real Android widgets (AppWidgetHost)
-  // -----------------------------------------------------------------------
-
-  /// Place a freshly bound real widget at the top of [page]'s stack.
   bool placeHostedWidget({
     required int page,
     int? index,
@@ -368,9 +323,6 @@ class HomeController extends AsyncNotifier<HomeLayout> {
     return true;
   }
 
-  /// Live resize — the clock re-renders at every size (screen 7). Spans
-  /// clamp to the proposal's 2×1 … 4×4; non-clock kinds are fixed-size and
-  /// never reach here.
   void resizeWidget(String id, {required int w, required int h}) {
     final current = state.value;
     if (current == null) return;
@@ -388,13 +340,11 @@ class HomeController extends AsyncNotifier<HomeLayout> {
         ],
       ),
     );
-    // The clock's span is the persisted source of truth.
     ref
         .read(launcherSettingsProvider.notifier)
         .setClockSpan(w: clampedW, h: clampedH);
   }
 
-  /// Reorder within a page's widget stack (drag body up/down in edit mode).
   void moveWidget(String id, {required int newIndex}) {
     final current = state.value;
     if (current == null) return;
@@ -409,12 +359,10 @@ class HomeController extends AsyncNotifier<HomeLayout> {
     if (from == to) return;
 
     pageWidgets.removeAt(from);
-    // Account for the removal shift.
     if (from < to) to--;
     pageWidgets.insert(to, widget);
 
     final others = current.widgets.where((w) => w.page != widget.page).toList();
-    // Rebuild the full list preserving cross-page order.
     final rebuilt = <PlacedWidget>[];
     var pi = 0;
     for (final w in current.widgets) {
@@ -428,8 +376,6 @@ class HomeController extends AsyncNotifier<HomeLayout> {
     state = AsyncData(next);
     _persistHosted(next);
   }
-
-  // -- hosted persistence ---------------------------------------------------
 
   Map<String, Object?> _hostedToJson(PlacedWidget w) => {
     'id': w.id,
@@ -451,7 +397,6 @@ class HomeController extends AsyncNotifier<HomeLayout> {
           .toList();
       await prefs.setString(_kHostedWidgetsKey, jsonEncode(hosted));
     } catch (_) {
-      // Best-effort; the OS keeps the binding either way.
     }
   }
 
@@ -492,7 +437,6 @@ class HomeController extends AsyncNotifier<HomeLayout> {
   }
 }
 
-/// Current home page index (drives the pill dots).
 class CurrentPageController extends Notifier<int> {
   @override
   int build() => 0;
@@ -503,8 +447,6 @@ class CurrentPageController extends Notifier<int> {
 final NotifierProvider<CurrentPageController, int> currentPageProvider =
     NotifierProvider<CurrentPageController, int>(CurrentPageController.new);
 
-/// Drawer visibility. Hosts own their overlay stack; the provider keeps the
-/// state testable and shared between the sketchbook and pond homes.
 class DrawerVisibilityController extends Notifier<bool> {
   @override
   bool build() => false;
@@ -519,14 +461,11 @@ final NotifierProvider<DrawerVisibilityController, bool> drawerOpenProvider =
       DrawerVisibilityController.new,
     );
 
-/// One-shot demo feedback (snackbar). Demo mode is honest about what is
-/// real: launches record recents, device-only actions say so.
 class ToastEvent {
   const ToastEvent(this.message, {this.undoable = false});
 
   final String message;
 
-  /// True when the toast should carry an Undo pill (edit-mode actions).
   final bool undoable;
 }
 
@@ -536,7 +475,6 @@ class ToastController extends Notifier<ToastEvent?> {
 
   void show(String message) => state = ToastEvent(message);
 
-  /// Edit-mode actions end with an undoable toast ("per-action undo").
   void showUndoable(String message) =>
       state = ToastEvent(message, undoable: true);
 
@@ -546,9 +484,6 @@ class ToastController extends Notifier<ToastEvent?> {
 final NotifierProvider<ToastController, ToastEvent?> toastProvider =
     NotifierProvider<ToastController, ToastEvent?>(ToastController.new);
 
-/// Edit mode (screen 7) — grid skeleton, selection handles, honest
-/// snapping. Entered from the context menu, the pinch gesture or the
-/// picker's pick-to-place flow; left via the Done pill or back.
 class EditModeController extends Notifier<bool> {
   @override
   bool build() => false;
@@ -567,7 +502,6 @@ class EditModeController extends Notifier<bool> {
 final NotifierProvider<EditModeController, bool> editModeProvider =
     NotifierProvider<EditModeController, bool>(EditModeController.new);
 
-/// The widget currently wearing the dashed selection outline.
 class SelectedWidgetController extends Notifier<String?> {
   @override
   String? build() => null;
@@ -581,8 +515,6 @@ selectedWidgetIdProvider = NotifierProvider<SelectedWidgetController, String?>(
   SelectedWidgetController.new,
 );
 
-/// Pick-to-place: set while the freshly picked widget rides the finger;
-/// cleared on drop or cancel.
 class PlacementController extends Notifier<WidgetKind?> {
   @override
   WidgetKind? build() => null;

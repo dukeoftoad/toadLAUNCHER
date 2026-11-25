@@ -1,4 +1,3 @@
-/// Token contract tests — the spec hex values are the law.
 library;
 
 import 'package:material_ui/material_ui.dart';
@@ -45,7 +44,6 @@ void main() {
     test('custom accent re-tint keeps paper-derived wash', () {
       final retinted = kLightPalette.withAccent(const Color(0xFF3F6E8E));
       expect(retinted.accent, const Color(0xFF3F6E8E));
-      // Wash blends accent over paper — visibly different from toad wash.
       expect(retinted.accentWash, isNot(kLightPalette.accentWash));
     });
   });

@@ -1,8 +1,3 @@
-/// App index repository — the seam between the launcher UI and Android.
-///
-/// Demo mode (default in this alpha) serves the proposal's demo app set so
-/// every screen is pixel-verifiable without a device. The Android-backed
-/// implementation (stage 3+) plugs in behind the same interface.
 library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -17,24 +12,15 @@ abstract class AppRepository {
 
   Future<HomeLayout> loadHomeLayout({int columnsPerRow});
 
-  /// Pond Pro pad rows (3 pads per row; the resident occupies the last
-  /// slot of the last row in demo mode).
   Future<List<List<AppEntry>>> loadPondRows();
 
-  /// Launch by package; demo mode no-ops.
   Future<void> launch(AppEntry app);
 
-  /// Hand the app to the system uninstaller. Demo answers honestly:
-  /// false — the UI then explains device mode is off.
   Future<bool> uninstallApp(AppEntry app) async => false;
 
-  /// Open the system App info page. Demo answers false.
   Future<bool> openAppDetails(AppEntry app) async => false;
 }
 
-/// Demo index mirroring the design mockups (screens 1, 4, 5, 11).
-/// Extends (not implements) so it inherits the honest `false` defaults
-/// for the device-only actions.
 class DemoAppRepository extends AppRepository {
   const DemoAppRepository();
 
@@ -95,7 +81,6 @@ class DemoAppRepository extends AppRepository {
     AppEntry(id: 'camera', name: 'Camera', glyph: '◉', gradientIndex: 3),
   ];
 
-  /// The Media folder — screen 5. Lives as a tile on home page 2.
   static const FolderData _mediaFolder = FolderData(
     id: 'media',
     title: 'Media',
@@ -116,7 +101,6 @@ class DemoAppRepository extends AppRepository {
     ],
   );
 
-  /// Drawer demo set — A–Z with the Contacts badge from screen 4.
   static const List<AppEntry> _drawerApps = [
     AppEntry(id: 'alarm', name: 'Alarm', glyph: '⏰', gradientIndex: 2),
     AppEntry(
@@ -166,7 +150,6 @@ class DemoAppRepository extends AppRepository {
     return HomeLayout(
       pages: [
         [for (final a in _page1) AppCell(a)],
-        // The Media folder tile leads page 2 (folder screens, stage 2).
         [const FolderCell(_mediaFolder), for (final a in _page2) AppCell(a)],
         [for (final a in _page3) AppCell(a)],
       ],
@@ -188,8 +171,6 @@ class DemoAppRepository extends AppRepository {
     );
   }
 
-  /// Pond home rows (3 pads per row) — screen 11. The resident is
-  /// represented by a marker entry the UI renders as the toad itself.
   @override
   Future<List<List<AppEntry>>> loadPondRows() async => const [
     [
@@ -206,14 +187,9 @@ class DemoAppRepository extends AppRepository {
 
   @override
   Future<void> launch(AppEntry app) async {
-    // Demo mode: nothing to launch. Device mode will fire an
-    // intent through the platform channel.
   }
 }
 
-/// Bilocator for the active repository — Device mode when the platform
-/// channel answers AND the user kept it on (default); Demo otherwise
-/// (tests, web, and the honest fallback if Android ever stops answering).
 final Provider<AppRepository> appRepositoryProvider = Provider<AppRepository>(
   (ref) {
     final reachable = ref.watch(deviceCapabilityProvider).value ?? false;
@@ -228,7 +204,6 @@ final Provider<AppRepository> appRepositoryProvider = Provider<AppRepository>(
   },
 );
 
-/// One-shot probe: does the Android side of the channel exist?
 final FutureProvider<bool> deviceCapabilityProvider = FutureProvider<bool>(
   (ref) => ref.watch(deviceBridgeProvider).available(),
 );
