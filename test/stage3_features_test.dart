@@ -5,12 +5,13 @@
 library;
 
 import 'package:flutter/gestures.dart' show kDoubleTapMinTime;
+import 'package:flutter/services.dart' show MethodChannel;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:toadlauncher/core/device/device_bridge.dart'
-    show kFallbackVersion;
+    show DeviceBridge, kFallbackVersion;
 import 'package:toadlauncher/core/models/models.dart';
 import 'package:toadlauncher/core/settings/launcher_settings.dart';
 import 'package:toadlauncher/core/theme/toad_theme.dart';
@@ -26,6 +27,18 @@ final DateTime _fixedNow = DateTime(2026, 11, 24, 10, 42); // Tuesday
 
 Future<void> pumpHome(WidgetTester tester) async {
   SharedPreferences.setMockInitialValues(<String, Object>{});
+  // The real bridge's MethodChannel, mocked to answer null: without this,
+  // channel calls in the test world never complete (the test messenger
+  // has no platform behind it) — providers like currentVersionProvider
+  // would sit in loading forever and the hub would render 'the toad
+  // build'. Null answers exercise the real fallback path instead:
+  // available() → false → kFallbackVersion, exactly like demo mode.
+  TestWidgetsFlutterBinding.ensureInitialized();
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(
+        const MethodChannel(DeviceBridge.channelName),
+        (call) async => null,
+      );
   await tester.pumpWidget(
     ProviderScope(
       overrides: [clockProvider.overrideWith((ref) => Stream.value(_fixedNow))],
@@ -469,7 +482,11 @@ void main() {
       find.text('toadLAUNCHER · one family with toadGALLERY & toadPLAYER'),
       findsOneWidget,
     );
-    await tester.scrollUntilVisible(find.text('Gestures'), 100);
+    // Scroll all the way back up — the hub keeps its scroll offset across
+    // sub-page visits, and the header '‹' must be built again for the
+    // later back-taps (lazy list: off-viewport children do not exist).
+    // Negative delta = finger drags down = content scrolls toward the top.
+    await tester.scrollUntilVisible(find.text('‹'), -100);
 
     // Gestures sub-page.
     await tester.tap(find.text('Gestures'));
