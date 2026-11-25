@@ -57,6 +57,13 @@ void main() {
       expect(find.text('Search apps'), findsOneWidget);
       expect(find.text('A'), findsOneWidget); // Caveat section letters
       expect(find.text('B'), findsOneWidget);
+      // The pinned toadLIST row (v0.12) pushes the C section below the
+      // fold — scroll the A–Z index to it like a real user would.
+      await tester.scrollUntilVisible(
+        find.text('C'),
+        80,
+        scrollable: find.byType(Scrollable).last,
+      );
       expect(find.text('C'), findsOneWidget);
       // Recents seeded from the repo (toadGALLERY also lives on the grid).
       expect(find.text('toadGALLERY'), findsWidgets);

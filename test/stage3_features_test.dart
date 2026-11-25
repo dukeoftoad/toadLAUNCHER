@@ -9,6 +9,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:toadlauncher/core/device/device_bridge.dart'
+    show kFallbackVersion;
 import 'package:toadlauncher/core/models/models.dart';
 import 'package:toadlauncher/core/settings/launcher_settings.dart';
 import 'package:toadlauncher/core/theme/toad_theme.dart';
@@ -292,7 +294,7 @@ void main() {
     expect(find.text('Caveat clock'), findsOneWidget);
     expect(find.textContaining('already placed'), findsOneWidget);
     expect(find.text('Month calendar'), findsOneWidget);
-    expect(find.text('Sticky note'), findsOneWidget);
+    expect(find.text('toadLIST note'), findsOneWidget);
 
     // Featured tap (already placed) → calm toast, no crash.
     await tester.tap(find.text('toadGALLERY · Memories'));
@@ -448,10 +450,26 @@ void main() {
     expect(find.text('Sketchbook · auto · squircle icons'), findsOneWidget);
     expect(find.text('Privacy'), findsOneWidget);
     expect(find.text('No analytics · no network permission'), findsOneWidget);
+    // v0.12 added Permissions & Battery rows — the About row and the
+    // family footer now sit below the fold on phone surfaces; scroll to
+    // them, then back up for the Gestures tap.
+    await tester.scrollUntilVisible(
+      find.text('$kFallbackVersion · part of the toad family'),
+      60,
+    );
+    expect(
+      find.text('$kFallbackVersion · part of the toad family'),
+      findsOneWidget,
+    );
+    await tester.scrollUntilVisible(
+      find.text('toadLAUNCHER · one family with toadGALLERY & toadPLAYER'),
+      60,
+    );
     expect(
       find.text('toadLAUNCHER · one family with toadGALLERY & toadPLAYER'),
       findsOneWidget,
     );
+    await tester.scrollUntilVisible(find.text('Gestures'), 100);
 
     // Gestures sub-page.
     await tester.tap(find.text('Gestures'));

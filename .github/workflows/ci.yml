@@ -55,8 +55,8 @@ jobs:
           if-no-files-found: error
 
   release:
-    name: Signed beta release
-    # Runs when a v* tag is pushed (git tag v0.9.0-beta && git push origin v0.9.0-beta).
+    name: Signed release
+    # Runs when a v* tag is pushed (git tag v1.0.0 && git push origin v1.0.0).
     if: startsWith(github.ref, 'refs/tags/v')
     needs: verify
     runs-on: ubuntu-latest
@@ -99,14 +99,15 @@ jobs:
         with:
           name: toadLAUNCHER v${{ steps.stage.outputs.version }}
           body: |
-            toadLAUNCHER beta — part of the toad family. Hand-made, calm, instant.
+            toadLAUNCHER — part of the toad family. Hand-made, calm, instant.
 
             **Install**
             1. Download `toadlauncher-v*-universal-install.apk` (universal: works on every phone architecture).
-            2. If an older CI build is installed, **uninstall it first** — pre-beta builds were signed with random per-run debug keys, so Android refuses the update (that was the "App not installed" bug; fixed here with a committed release keystore).
+            2. Updating from v0.9.0-beta or newer installs right over it — same committed release keystore. Only pre-v0.9 CI builds (random debug keys) need an uninstall first.
             3. Allow "Install unknown apps" for your browser/file manager when asked.
             4. Requires Android 8.0+ (minSdk 26). Open the APK, install, then set toadLAUNCHER as your Home app.
 
+            Updates arrive in-app: Settings → Device & updates, or the banner on your home screen.
             Offline-first · no ads · no analytics · **no INTERNET permission**.
           files: |
             dist/toadlauncher-v${{ steps.stage.outputs.version }}-universal-install.apk
