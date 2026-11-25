@@ -25,7 +25,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
-import '../../core/settings/launcher_settings.dart';
+import '../../core/device/battery_monitor.dart' show pondCalmProvider;
 import '../../core/theme/toad_tokens.dart';
 
 /// A raw-ticker provider: the pond owns its time. TickerMode cannot mute
@@ -138,7 +138,9 @@ class _PondAmbientState extends ConsumerState<PondAmbient> {
 
   @override
   Widget build(BuildContext context) {
-    final calm = ref.watch(launcherSettingsProvider).calmPond;
+    // Calm = the manual switch OR the drain (low-battery calm). Both go
+    // through one provider so the pond never argues with the skin scope.
+    final calm = ref.watch(pondCalmProvider);
     _sync(calm);
     return widget.builder(context, _elapsed);
   }

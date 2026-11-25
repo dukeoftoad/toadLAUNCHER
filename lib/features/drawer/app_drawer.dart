@@ -19,6 +19,8 @@ import '../../core/theme/toad_theme.dart';
 import '../../core/theme/toad_tokens.dart';
 import '../../shared/widgets/toad_app_icon.dart';
 import '../home/home_controller.dart';
+import '../todo/todo_screen.dart' show openTodoList;
+import '../todo/todo_store.dart' show todoListProvider;
 
 class AppDrawer extends ConsumerStatefulWidget {
   const AppDrawer({super.key, this.startWithSearch = false});
@@ -249,11 +251,98 @@ class _Body extends StatelessWidget {
         Expanded(
           child: _searching
               ? _SearchResults(query: query, apps: layout.allApps)
-              : _AzIndex(apps: layout.allApps, showBadges: showBadges),
+              : Column(
+                  children: [
+                    // The launcher's own list, pinned above the index —
+                    // a native page, not an app.
+                    const _TodoListRow(),
+                    Expanded(child: _AzIndex(
+                      apps: layout.allApps,
+                      showBadges: showBadges,
+                    )),
+                  ],
+                ),
         ),
         const PageDotsMini(),
         const SizedBox(height: 14),
       ],
+    );
+  }
+}
+
+/// Pinned toadLIST row — the launcher-native todo page with comments.
+class _TodoListRow extends ConsumerWidget {
+  const _TodoListRow();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final palette = ToadTheme.of(context).palette;
+    final skin = ToadTheme.of(context);
+    final dark = skin.isDark;
+    final ink = dark ? const Color(0xFFE8E2D4) : palette.ink;
+    final tasks = ref.watch(todoListProvider);
+    final open = tasks.where((t) => !t.done).length;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => openTodoList(context),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: palette.accentWash,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: palette.hairline.withValues(
+                alpha: palette.hairline.a * 0.8,
+              ),
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 26,
+                height: 26,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: palette.accent.withValues(alpha: palette.accent.a * 0.16),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '✓',
+                  style: ToadType.hand(14, color: palette.accentInk),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('toadLIST', style: ToadType.hand(14.5, color: ink)),
+                    Text(
+                      open == 0
+                          ? 'a quiet pond — tap to add flies'
+                          : '$open ${open == 1 ? 'fly' : 'flies'} to catch',
+                      style: ToadType.inter(
+                        9.5,
+                        color: ink.withValues(alpha: ink.a * 0.55),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                '›',
+                style: ToadType.hand(
+                  16,
+                  color: ink.withValues(alpha: ink.a * 0.4),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

@@ -21,6 +21,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.drawable.AdaptiveIconDrawable
 import android.net.Uri
+import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
@@ -51,9 +52,10 @@ import java.util.concurrent.Executors
  * usage stats, wallpaper, widget HOSTING (AppWidgetHost + platform
  * views), default-home role, the notification shade, the lock screen
  * (through the accessibility service), app shortcuts, notification
- * counts, package-change events, and the system DownloadManager (whose
- * process — not ours — holds the network, keeping the launcher
- * INTERNET-free).
+ * counts, package-change events, battery status (the sticky
+ * ACTION_BATTERY_CHANGED intent — level + plugged, nothing more), and
+ * the system DownloadManager (whose process — not ours — holds the
+ * network, keeping the launcher INTERNET-free).
  */
 class MainActivity : FlutterActivity() {
 
@@ -70,6 +72,15 @@ class MainActivity : FlutterActivity() {
                 "packagesChanged",
                 mapOf("action" to (intent.action ?: ""), "packageId" to pkg),
             )
+        }
+    }
+
+    /** Battery ticks: the OS broadcasts on every level/plugged change and
+     *  we relay the two facts Dart needs. No permission required. */
+    private val batteryEvents = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != Intent.ACTION_BATTERY_CHANGED) return
+            channel?.invokeMethod("batteryChanged", batteryMap(intent))
         }
     }
 
@@ -158,6 +169,9 @@ class MainActivity : FlutterActivity() {
                 "shareApp" -> onMain(result) {
                     shareApp(call.argument<String>("packageId") ?: "")
                 }
+                "batteryStatus" -> result.success(
+                    batteryStatus()
+                )
                 "checkLatestRelease" -> onExecutor(result) {
                     checkLatestRelease(call.argument<String>("repo") ?: "")
                 }
@@ -207,6 +221,15 @@ class MainActivity : FlutterActivity() {
             @Suppress("UnspecifiedRegisterReceiverOption")
             registerReceiver(packageEvents, filter)
         }
+        // ACTION_BATTERY_CHANGED is a sticky, protected system broadcast —
+        // no permission, no export concerns (it can only come from the OS).
+        val batteryFilter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(batteryEvents, batteryFilter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("UnspecifiedRegisterReceiverOption")
+            registerReceiver(batteryEvents, batteryFilter)
+        }
     }
 
     override fun onStart() {
@@ -226,6 +249,11 @@ class MainActivity : FlutterActivity() {
             unregisterReceiver(packageEvents)
         } catch (e: Exception) {
             Log.w(TAG, "package events receiver not registered", e)
+        }
+        try {
+            unregisterReceiver(batteryEvents)
+        } catch (e: Exception) {
+            Log.w(TAG, "battery events receiver not registered", e)
         }
         executor.shutdown()
         super.onDestroy()
@@ -272,6 +300,35 @@ class MainActivity : FlutterActivity() {
         return mapOf(
             "versionName" to (info.versionName ?: "0.0.0"),
             "versionCode" to info.versionCode,
+        )
+    }
+
+    // ------------------------------------------------------------------
+    // battery (v0.12) — level + plugged from the sticky battery intent.
+    // The launcher keeps NO battery history here: sampling, drain rate
+    // and the low-battery guard are all Dart (Flutter owns decisions).
+    // ------------------------------------------------------------------
+
+    /** The two facts Dart needs from an ACTION_BATTERY_CHANGED intent. */
+    private fun batteryMap(intent: Intent): Map<String, Any> {
+        val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+        val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+        val status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
+        val plugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0)
+        val pct = if (level >= 0 && scale > 0) (level * 100 / scale) else -1
+        return mapOf(
+            "level" to pct,
+            "charging" to (plugged != 0),
+            "full" to (status == BatteryManager.BATTERY_STATUS_FULL),
+        )
+    }
+
+    private fun batteryStatus(): Map<String, Any> {
+        val intent = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        return if (intent != null) batteryMap(intent) else mapOf(
+            "level" to -1,
+            "charging" to false,
+            "full" to false,
         )
     }
 

@@ -15,6 +15,7 @@ import 'core/theme/toad_theme.dart';
 import 'core/theme/toad_tokens.dart';
 import 'features/home/home_controller.dart';
 import 'features/home/home_screen.dart';
+import 'features/intro/intro_screen.dart';
 import 'features/pond/pond_home.dart';
 
 class ToadLauncherApp extends ConsumerWidget {
@@ -40,7 +41,7 @@ class ToadLauncherApp extends ConsumerWidget {
           ),
         ),
       ),
-      home: _SkinGate(pondPro: settings.pondPro),
+      home: _FirstRunGate(pondPro: settings.pondPro, introSeen: settings.introSeen),
     );
   }
 }
@@ -225,17 +226,19 @@ class UpdateBannerHost extends ConsumerWidget {
   }
 }
 
-/// Edge-to-edge, then pick the home variant (the skin scope comes from the
-/// app builder above).
-class _SkinGate extends StatelessWidget {
-  const _SkinGate({required this.pondPro});
+/// First run → the intro; after that, the home. The intro replays from
+/// Settings → About, so "welcome to the pond" is never lost forever.
+class _FirstRunGate extends StatelessWidget {
+  const _FirstRunGate({required this.pondPro, required this.introSeen});
 
   final bool pondPro;
+  final bool introSeen;
 
   @override
   Widget build(BuildContext context) {
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
 
+    if (!introSeen) return const IntroScreen();
     return pondPro ? const PondHome() : const HomeScreen();
   }
 }

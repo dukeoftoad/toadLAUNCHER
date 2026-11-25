@@ -175,10 +175,10 @@ class WidgetPickerSheet extends ConsumerWidget {
                           ),
                           _WidgetRow(
                             preview: const _StickyPreview(),
-                            title: 'Sticky note',
+                            title: 'toadLIST note',
                             subtitle: stickyPlaced
-                                ? 'Patrick Hand scribble · 2×2 — already placed'
-                                : 'Patrick Hand scribble · 2×2',
+                                ? 'Your live list · 2×2 — already placed'
+                                : 'Your live list, top flies · 2×2',
                             ink: rowInk,
                             accent: palette.accent,
                             dimmed: stickyPlaced,
@@ -415,7 +415,7 @@ class _StickyPreview extends StatelessWidget {
           ),
         ),
         child: Text(
-          'buy milk…',
+          '✓ list…',
           style: ToadType.hand(
             12,
             color: palette.ink.withValues(alpha: palette.ink.a * 0.9),

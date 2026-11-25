@@ -18,6 +18,8 @@ import 'package:flutter/services.dart' show SystemUiOverlayStyle;
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/models/models.dart';
+import '../../core/device/battery_monitor.dart'
+    show batteryMonitorProvider;
 import '../../core/repositories/app_repository.dart';
 import '../../core/repositories/device_app_repository.dart';
 import '../../core/settings/launcher_settings.dart';
@@ -25,6 +27,7 @@ import '../../core/theme/toad_theme.dart';
 import '../../core/theme/toad_tokens.dart';
 import '../../shared/widgets/toad_app_icon.dart';
 import '../../shared/widgets/toad_toast.dart';
+import '../../features/settings/battery_page.dart';
 import '../context_menu/app_context_menu.dart';
 import '../home/home_controller.dart';
 import '../home/widgets/app_grid.dart' show PageDots;
@@ -129,6 +132,7 @@ class _PondHomeState extends ConsumerState<PondHome> {
     final drawerOpen = ref.watch(drawerOpenProvider);
 
     final hero = buildHeroData(now, pond: true, pondNight: pond.isNight);
+    final battery = ref.watch(batteryMonitorProvider);
 
     ref.listen<ToastEvent?>(toastProvider, (prev, event) {
       if (event == null || identical(event, prev)) return;
@@ -195,7 +199,18 @@ class _PondHomeState extends ConsumerState<PondHome> {
                       },
                       child: Column(
                         children: [
-                          HeroZone(data: hero),
+                          HeroZone(
+                            data: hero,
+                            batteryLine: battery.level >= 0
+                                ? battery.heroLine
+                                : null,
+                            onBatteryTap: () =>
+                                Navigator.of(context).push(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => const BatteryPage(),
+                                  ),
+                                ),
+                          ),
 
                           // The clock's shimmering reflection.
                           _ClockReflection(

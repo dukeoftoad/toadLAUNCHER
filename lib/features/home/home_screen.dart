@@ -21,6 +21,7 @@ import '../../core/theme/toad_theme.dart';
 import '../../core/theme/toad_tokens.dart';
 import '../../shared/widgets/placed_widgets.dart' show widgetZoneHeight;
 import '../../shared/widgets/sketchbook_wallpaper.dart';
+import '../../shared/widgets/toad_ask.dart';
 import '../../shared/widgets/toad_toast.dart';
 import '../../shared/widgets/wallpaper_glow.dart';
 import '../context_menu/app_context_menu.dart';
@@ -413,7 +414,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   /// Double-tap sleep — real on device through the accessibility lock
-  /// service; the service-missing path deep-links to the exact toggle.
+  /// service. When the service is off, the app ASKS: one calm dialog
+  /// explaining the smallest-possible footprint, then the exact,
+  /// pre-selected Accessibility entry — never a silent denial.
   void _onDoubleTap() {
     if (_overlayBusy) return;
     final settings = ref.read(launcherSettingsProvider);
@@ -421,14 +424,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     final repo = ref.read(appRepositoryProvider);
     if (repo is DeviceAppRepository) {
-      ref.read(deviceBridgeProvider).lockScreen().then((locked) {
-        if (!locked && mounted) {
-          _toast(
-            'Screen lock needs the toad lock service — opening '
-            'Accessibility, flip it on',
-          );
-          ref.read(deviceBridgeProvider).openAccessibilitySettings();
-        }
+      final bridge = ref.read(deviceBridgeProvider);
+      bridge.lockScreen().then((locked) async {
+        if (locked || !mounted) return;
+        await showToadAsk(
+          context,
+          askLockService(bridge.openAccessibilitySettings),
+        );
       });
     } else {
       _toast(

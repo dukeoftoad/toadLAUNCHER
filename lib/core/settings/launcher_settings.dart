@@ -79,6 +79,8 @@ class LauncherSettings {
     this.deviceMode = true,
     this.autoUpdateCheck = true,
     this.usageRecentsOptIn = false,
+    this.introSeen = false,
+    this.lowBatteryCalm = true,
   });
 
   // Wallpaper & style.
@@ -149,6 +151,16 @@ class LauncherSettings {
   /// the launcher's own recorded history; off never nags.
   final bool usageRecentsOptIn;
 
+  /// The first-run intro shows once, then never again (replayable from
+  /// Settings → About). False until the user walks through it.
+  final bool introSeen;
+
+  /// Low-battery calm — when the pond's battery monitor reads ≤ 15 % and
+  /// unplugged, night falls instantly and the ambient loop freezes, exactly
+  /// like Calm-pond but driven by the drain, not the clock. Off never
+  /// interferes.
+  final bool lowBatteryCalm;
+
   LauncherSettings copyWith({
     SkinMode? skinMode,
     bool? pondPro,
@@ -180,6 +192,8 @@ class LauncherSettings {
     bool? deviceMode,
     bool? autoUpdateCheck,
     bool? usageRecentsOptIn,
+    bool? introSeen,
+    bool? lowBatteryCalm,
   }) {
     return LauncherSettings(
       skinMode: skinMode ?? this.skinMode,
@@ -213,6 +227,8 @@ class LauncherSettings {
       deviceMode: deviceMode ?? this.deviceMode,
       autoUpdateCheck: autoUpdateCheck ?? this.autoUpdateCheck,
       usageRecentsOptIn: usageRecentsOptIn ?? this.usageRecentsOptIn,
+      introSeen: introSeen ?? this.introSeen,
+      lowBatteryCalm: lowBatteryCalm ?? this.lowBatteryCalm,
     );
   }
 
@@ -247,6 +263,8 @@ class LauncherSettings {
     'deviceMode': deviceMode,
     'autoUpdateCheck': autoUpdateCheck,
     'usageRecentsOptIn': usageRecentsOptIn,
+    'introSeen': introSeen,
+    'lowBatteryCalm': lowBatteryCalm,
   };
 
   factory LauncherSettings.fromJson(Map<String, Object?> json) {
@@ -281,6 +299,8 @@ class LauncherSettings {
       deviceMode: (json['deviceMode'] as bool?) ?? true,
       autoUpdateCheck: (json['autoUpdateCheck'] as bool?) ?? true,
       usageRecentsOptIn: (json['usageRecentsOptIn'] as bool?) ?? false,
+      introSeen: (json['introSeen'] as bool?) ?? false,
+      lowBatteryCalm: (json['lowBatteryCalm'] as bool?) ?? true,
     );
   }
 }
@@ -363,6 +383,15 @@ class LauncherSettingsController extends Notifier<LauncherSettings> {
   void setAutoUpdateCheck(bool v) => patch(state.copyWith(autoUpdateCheck: v));
   void setUsageRecentsOptIn(bool v) =>
       patch(state.copyWith(usageRecentsOptIn: v));
+
+  // v0.12 — intro + battery.
+  void setIntroSeen() => patch(state.copyWith(introSeen: true));
+
+  /// Settings → About replays the first-run intro with this.
+  void replayIntro() => patch(state.copyWith(introSeen: false));
+
+  void setLowBatteryCalm(bool v) =>
+      patch(state.copyWith(lowBatteryCalm: v));
 }
 
 /// Ticker for the hero clock and pond day/night anchors.

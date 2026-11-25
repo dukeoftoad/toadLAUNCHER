@@ -15,13 +15,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/settings/launcher_settings.dart';
+import '../../core/device/battery_monitor.dart' show batteryMonitorProvider;
 import '../../core/device/device_bridge.dart';
 import '../../core/device/update_engine.dart';
 import '../../core/repositories/app_repository.dart';
 import '../../core/theme/toad_theme.dart';
 import '../../core/theme/toad_tokens.dart';
+import '../../shared/widgets/toad_ask.dart';
+import '../todo/todo_screen.dart' show openTodoList;
+import '../todo/todo_store.dart' show todoListProvider;
 import '../wallpaper_style/wallpaper_style_screen.dart'
     show ToadSwitch, WallpaperStyleScreen;
+import 'battery_page.dart';
+import 'permissions_page.dart';
 
 /// Entry point — pushes the hub. Called from the empty-space menu, the
 /// edit strip and the dock long-press demo paths.
@@ -68,6 +74,14 @@ class SettingsHub extends ConsumerWidget {
         _GroupCard(
           palette: palette,
           children: [
+            _SetRow(
+              icon: '✓',
+              title: 'toadLIST',
+              subtitle: _todoSubtitle(ref),
+              ink: ink,
+              palette: palette,
+              onTap: () => openTodoList(context),
+            ),
             _SetRow(
               icon: '▤',
               title: 'Appearance',
@@ -119,6 +133,16 @@ class SettingsHub extends ConsumerWidget {
               onTap: () => _push(context, const NotificationsSettingsPage()),
             ),
             _SetRow(
+              icon: '⚿',
+              title: 'Permissions & access',
+              subtitle:
+                  'The one page where nothing stays silently denied — '
+                  'dots, lock, usage, Home role',
+              ink: ink,
+              palette: palette,
+              onTap: () => openPermissionsPage(context),
+            ),
+            _SetRow(
               icon: '∅',
               title: 'Privacy',
               subtitle: 'No analytics · no network permission',
@@ -134,6 +158,14 @@ class SettingsHub extends ConsumerWidget {
               palette: palette,
               onTap: () => _push(context, const DeviceUpdatesSettingsPage()),
             ),
+            _SetRow(
+              icon: '◔',
+              title: 'Battery & pond guard',
+              subtitle: _batterySubtitle(ref),
+              ink: ink,
+              palette: palette,
+              onTap: () => _push(context, const BatteryPage()),
+            ),
           ],
         ),
         _GroupCard(
@@ -142,7 +174,7 @@ class SettingsHub extends ConsumerWidget {
             _SetRow(
               icon: 'ⓘ',
               title: 'About toadLAUNCHER',
-              subtitle: 'v0.1.0-alpha.1 · part of the toad family',
+              subtitle: _aboutSubtitle(ref),
               ink: ink,
               palette: palette,
               onTap: () => _push(context, const AboutPage()),
@@ -173,6 +205,30 @@ class SettingsHub extends ConsumerWidget {
         ? 'device mode'
         : 'demo mode';
     return "$mode · updates ${settings.autoUpdateCheck ? 'auto' : 'manual'}";
+  }
+
+  String _todoSubtitle(WidgetRef ref) {
+    final tasks = ref.watch(todoListProvider);
+    if (tasks.isEmpty) return 'your launcher-native list — notes under '
+        'every fly';
+    final open = tasks.where((t) => !t.done).length;
+    final notes = tasks.fold<int>(0, (n, t) => n + t.comments.length);
+    return '$open open · $notes notes · all local';
+  }
+
+  String _batterySubtitle(WidgetRef ref) {
+    final battery = ref.watch(batteryMonitorProvider);
+    if (battery.level < 0) return 'watching the pond\'s energy';
+    final rate = battery.drainPerHour();
+    final ratePart = rate == null
+        ? ''
+        : ' · −${rate.toStringAsFixed(1)}%/h';
+    return '${battery.level}%${battery.charging ? ' · charging' : ratePart}';
+  }
+
+  String _aboutSubtitle(WidgetRef ref) {
+    final version = ref.watch(currentVersionProvider).valueOrNull;
+    return '${version ?? 'the toad build'} · part of the toad family';
   }
 }
 
@@ -327,11 +383,30 @@ class GesturesSettingsPage extends ConsumerWidget {
             ),
             _SwitchRow(
               title: 'Double-tap to sleep',
-              subtitle: 'Requires write-settings permission',
+              subtitle: 'Locks through the tiny accessibility service — '
+                  'turning it on asks for the exact toggle',
               value: settings.doubleTapSleep,
               accent: palette.accent,
               ink: ink,
-              onChanged: (v) => notifier.patchDoubleTapSleep(v),
+              onChanged: (v) async {
+                notifier.patchDoubleTapSleep(v);
+                if (!v) return;
+                final reachable =
+                    ref.read(deviceCapabilityProvider).value ?? false;
+                if (!reachable) return;
+                final enabled = await ref
+                    .read(deviceBridgeProvider)
+                    .isLockServiceEnabled();
+                if (enabled || !context.mounted) return;
+                await showToadAsk(
+                  context,
+                  askLockService(
+                    () => ref
+                        .read(deviceBridgeProvider)
+                        .openAccessibilitySettings(),
+                  ),
+                );
+              },
             ),
             _SwitchRow(
               title: 'Swipe down opens notifications',
@@ -374,6 +449,8 @@ class GesturesSettingsPage extends ConsumerWidget {
 }
 
 /// Notifications — dots and badges, honest about demo scope.
+/// Turning dots/badges on ASKS for Notification access when it is not
+/// granted yet — the app asks, the user decides, nothing stays silent.
 class NotificationsSettingsPage extends ConsumerWidget {
   const NotificationsSettingsPage({super.key});
 
@@ -385,6 +462,27 @@ class NotificationsSettingsPage extends ConsumerWidget {
     final ink = dark ? const Color(0xFFE8E2D4) : palette.ink;
     final settings = ref.watch(launcherSettingsProvider);
     final notifier = ref.read(launcherSettingsProvider.notifier);
+
+    Future<void> ensureDotsAccess() async {
+      final reachable = ref.read(deviceCapabilityProvider).value ?? false;
+      if (!reachable) return;
+      final granted =
+          await ref.read(deviceBridgeProvider).hasNotificationAccess();
+      if (granted) {
+        ref.invalidate(notificationAccessProvider);
+        return;
+      }
+      if (!context.mounted) return;
+      await showToadAsk(
+        context,
+        askNotificationAccess(
+          () => ref
+              .read(deviceBridgeProvider)
+              .openNotificationListenerSettings(),
+        ),
+      );
+      ref.invalidate(notificationAccessProvider);
+    }
 
     return _SettingsScaffold(
       title: 'Notifications',
@@ -400,7 +498,10 @@ class NotificationsSettingsPage extends ConsumerWidget {
               value: settings.notificationDots,
               accent: palette.accent,
               ink: ink,
-              onChanged: notifier.setNotificationDots,
+              onChanged: (v) {
+                notifier.setNotificationDots(v);
+                if (v) ensureDotsAccess();
+              },
             ),
             _SwitchRow(
               title: 'Badges',
@@ -408,7 +509,15 @@ class NotificationsSettingsPage extends ConsumerWidget {
               value: settings.badges,
               accent: palette.accent,
               ink: ink,
-              onChanged: notifier.setBadges,
+              onChanged: (v) {
+                notifier.setBadges(v);
+                if (v) {
+                  if (!settings.notificationDots) {
+                    notifier.setNotificationDots(true);
+                  }
+                  ensureDotsAccess();
+                }
+              },
             ),
             const _NotificationAccessRow(),
           ],
@@ -549,7 +658,7 @@ class PrivacyPage extends ConsumerWidget {
   }
 }
 
-/// About — version + family.
+/// About — live version + family + intro replay.
 class AboutPage extends ConsumerWidget {
   const AboutPage({super.key});
 
@@ -559,6 +668,8 @@ class AboutPage extends ConsumerWidget {
     final palette = skin.palette;
     final dark = skin.isDark;
     final ink = dark ? const Color(0xFFE8E2D4) : palette.ink;
+    final version = ref.watch(currentVersionProvider).valueOrNull ??
+        kFallbackVersion;
 
     return _SettingsScaffold(
       title: 'About toadLAUNCHER',
@@ -576,7 +687,7 @@ class AboutPage extends ConsumerWidget {
               Text('toadLAUNCHER', style: ToadType.caveat(34, color: ink)),
               const SizedBox(height: 6),
               Text(
-                'v0.11.0-beta · real widgets, real gestures, real dots',
+                '$version · asks for access, updates itself quietly',
                 style: ToadType.inter(
                   11,
                   color: ink.withValues(alpha: ink.a * 0.6),
@@ -595,6 +706,25 @@ class AboutPage extends ConsumerWidget {
               ),
             ],
           ),
+        ),
+        const SizedBox(height: 4),
+        _GroupCard(
+          palette: palette,
+          children: [
+            _SetRow(
+              icon: '⌂',
+              title: 'Watch the intro again',
+              subtitle:
+                  'The four welcome pages — the pond, the promise, '
+                  'making it yours, the gestures',
+              ink: ink,
+              palette: palette,
+              onTap: () {
+                Navigator.of(context).popUntil((route) => route.isFirst);
+                ref.read(launcherSettingsProvider.notifier).replayIntro();
+              },
+            ),
+          ],
         ),
         const SizedBox(height: 14),
         Text(
@@ -660,16 +790,19 @@ class DeviceUpdatesSettingsPage extends ConsumerWidget {
               ink: ink,
               onChanged: (v) async {
                 notifier.setUsageRecentsOptIn(v);
-                if (v) {
-                  final granted = await ref
-                      .read(deviceBridgeProvider)
-                      .hasUsageAccess();
-                  if (!granted) {
-                    await ref
+                if (!v) return;
+                final granted = await ref
+                    .read(deviceBridgeProvider)
+                    .hasUsageAccess();
+                if (granted || !context.mounted) return;
+                await showToadAsk(
+                  context,
+                  askUsageAccess(
+                    () => ref
                         .read(deviceBridgeProvider)
-                        .openUsageAccessSettings();
-                  }
-                }
+                        .openUsageAccessSettings(),
+                  ),
+                );
               },
             ),
           ],
@@ -884,6 +1017,31 @@ class _UpdateCheckRow extends StatelessWidget {
                 ),
             ],
           ),
+          // The promised "notes below" — release notes actually rendered
+          // when the release carries them (v0.12 fixed the old lie).
+          if (state is UpdateAvailable &&
+              (state as UpdateAvailable).release.notes != null &&
+              (state as UpdateAvailable).release.notes!.trim().isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: palette.accentWash,
+                borderRadius: BorderRadius.circular(ToadRadii.inner + 2),
+              ),
+              child: Text(
+                _trimNotes((state as UpdateAvailable).release.notes!),
+                maxLines: 12,
+                overflow: TextOverflow.ellipsis,
+                style: ToadType.hand(
+                  12.5,
+                  height: 1.4,
+                  color: ink.withValues(alpha: ink.a * 0.8),
+                ),
+              ),
+            ),
+          ],
           if (state is UpdateDownloading) ...[
             const SizedBox(height: 8),
             ClipRRect(
@@ -899,6 +1057,22 @@ class _UpdateCheckRow extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  /// Release bodies arrive as raw markdown; strip the noisier markup so
+  /// the pond reads clean sentences.
+  String _trimNotes(String notes) {
+    final lines = notes
+        .split('\n')
+        .map((l) => l
+            .replaceAll(RegExp(r'^#{1,6}\s*'), '')
+            .replaceAll(RegExp(r'\*\*(.+?)\*\*'), r'$1')
+            .replaceAll(RegExp(r'^[-*]\s+'), '· ')
+            .trim())
+        .where((l) => l.isNotEmpty)
+        .take(14)
+        .toList();
+    return lines.join('\n');
   }
 
   void _onAction(UpdateEngine ctl, String action) {

@@ -161,6 +161,34 @@ class ToadShortcutInfo {
   final String label;
 }
 
+/// One battery reading from the OS (ACTION_BATTERY_CHANGED). The only
+/// battery facts the launcher ever touches: level, plugged, charging
+/// state — no per-app attribution, no history from the OS (the drain
+/// history is ours, sampled locally).
+@immutable
+class BatteryStatus {
+  const BatteryStatus({
+    required this.level,
+    required this.charging,
+    this.full = false,
+  });
+
+  /// 0–100, rounded. -1 when the OS refused to answer (unknown).
+  final int level;
+
+  /// True while plugged in (AC / USB / wireless) — drain sampling pauses.
+  final bool charging;
+
+  /// True when the battery reports FULL — “the frog is full”.
+  final bool full;
+
+  factory BatteryStatus.fromMap(Map<Object?, Object?> map) => BatteryStatus(
+    level: (map['level'] as num?)?.toInt() ?? -1,
+    charging: (map['charging'] as bool?) ?? false,
+    full: (map['full'] as bool?) ?? false,
+  );
+}
+
 /// Outcome of handing an APK to the system installer (toadFILES pattern).
 enum InstallHandoff {
   /// The package installer was launched.
@@ -394,6 +422,22 @@ class DeviceBridge {
     }
   }
 
+  // -- battery (v0.12) -------------------------------------------------------
+
+  /// Current battery reading — level 0–100, charging flag. The sticky
+  /// ACTION_BATTERY_CHANGED intent answers instantly, no permission.
+  /// Null when the OS does not answer (demo/web) — the monitor then runs
+  /// its honest simulated pond battery.
+  Future<BatteryStatus?> batteryStatus() async {
+    try {
+      final map = (await _invoke('batteryStatus')) as Map<Object?, Object?>?;
+      if (map == null) return null;
+      return BatteryStatus.fromMap(map);
+    } catch (_) {
+      return null;
+    }
+  }
+
   // -- real widget hosting --------------------------------------------------
 
   /// Every widget provider on the phone (preview PNGs included).
@@ -449,6 +493,8 @@ class DeviceBridge {
   final List<void Function(Map<String, int> counts)>
   _notificationCountListeners = [];
 
+  final List<void Function(BatteryStatus status)> _batteryListeners = [];
+
   bool _eventHandlerInstalled = false;
 
   void _installEventHandler() {
@@ -476,6 +522,16 @@ class DeviceBridge {
           }
           for (final listener in _notificationCountListeners.toList()) {
             listener(counts);
+          }
+        case 'batteryChanged':
+          final raw = call.arguments;
+          if (raw is Map) {
+            final status = BatteryStatus.fromMap(
+              raw.cast<Object?, Object?>(),
+            );
+            for (final listener in _batteryListeners.toList()) {
+              listener(status);
+            }
           }
       }
       return null;
@@ -508,6 +564,17 @@ class DeviceBridge {
     void Function(Map<String, int> counts) listener,
   ) {
     _notificationCountListeners.remove(listener);
+  }
+
+  /// Live battery pushes — the OS broadcasts ACTION_BATTERY_CHANGED on
+  /// every level tick; the channel relays it here.
+  void addBatteryListener(void Function(BatteryStatus status) listener) {
+    _installEventHandler();
+    _batteryListeners.add(listener);
+  }
+
+  void removeBatteryListener(void Function(BatteryStatus status) listener) {
+    _batteryListeners.remove(listener);
   }
 
   /// Package ids sorted by last use (newest first). Returns null when the
@@ -709,3 +776,19 @@ final FutureProvider<bool> notificationAccessProvider = FutureProvider<bool>(
 /// Live notification counts per package, pushed by the listener service.
 final StateProvider<Map<String, int>> notificationCountsProvider =
     StateProvider<Map<String, int>>((ref) => const {});
+
+/// The running launcher's version, straight from the package manager.
+/// Falls back to the pubspec-flavored name when Android is not answering
+/// (demo builds) — the About page never lies about what is installed.
+final FutureProvider<String> currentVersionProvider = FutureProvider<String>(
+  (ref) async {
+    final bridge = ref.watch(deviceBridgeProvider);
+    final reachable = await bridge.available();
+    if (!reachable) return kFallbackVersion;
+    final info = await bridge.versionInfo();
+    return info.versionName == '0.0.0' ? kFallbackVersion : info.versionName;
+  },
+);
+
+/// The version this source tree ships as (pubspec twin, kept in step).
+const String kFallbackVersion = 'v0.12.0-beta';

@@ -6,11 +6,57 @@ network permission at all**.
 
 Built from the approved UI/UX design proposal v1.1 (14 mockups, 4 themes).
 
-## Status — v0.11.0-beta (the launcher infrastructure release)
+## Status — v0.12.0-beta (the app-asks release)
 
-v0.10 wired the launcher to the phone; v0.11 closes the gap between "a
-Flutter app shaped like a home screen" and "a real launcher". Every item on
-the completeness checklist below is now real Android integration:
+v0.11 wired the launcher to the phone; v0.12 fixes the day-one flaw every
+fresh install hit: **special accesses sat silently denied because the app
+never asked**. Now the launcher asks — calmly, honestly, with the exact
+toggle one tap away — and ships three new natives: the first-run intro,
+toadLIST (todos with comments) and the battery drain system.
+
+- **The app asks, nothing stays silently denied** — every gated feature
+  (Notification dots, double-tap sleep, usage recents, HOME role, install
+  permission) now raises one calm hand-written dialog: what it needs, why,
+  and *open the exact toggle*. The switch that enables the feature asks
+  right there; the gesture that fails asks at the moment of use. A new
+  **Permissions & access** page lists all five with live status, grant
+  pills and an automatic re-check when you come back from Android settings.
+- **First-run intro** — four paper pages (what this is · the promise ·
+  make it yours · a real launcher), shown once, replayable from About,
+  ending on the Permissions page so nothing is denied on day one.
+- **toadLIST** — the launcher-native todo list: add a fly, tick it caught,
+  and pin **comments** under any task ("notes on the fly"). Filters,
+  re-word, confirm-before-release, clear-caught. Lives in the drawer
+  (pinned row), the settings hub, and the sticky-note widget — which is no
+  longer a static scribble but a **live view of your list**.
+- **Battery drain system** — the pond watches its own energy: level from
+  the OS battery broadcast (no permission), local samples (capped,
+  persisted, never sent anywhere), a measured **%/hour drain** summed over
+  unplugged spans only (a charge session never pretends to be negative
+  drain), a runtime estimate when data exists, a 6-hour sparkline with
+  charge-session underwash, and the hero clock wears a battery pill that
+  opens the drain page. **Low-battery calm**: ≤ 15 % and unplugged → night
+  falls instantly and the loop freezes, exactly like Calm-pond but driven
+  by the drain (switchable).
+- **In-app update, polished** — the release notes the update row promised
+  ("notes below") are actually rendered below now, markdown-stripped.
+- **About page tells the truth** — the version row reads the live package
+  version instead of the v0.1.0-alpha.1 hardcoded relic.
+- **Kotlin budget unchanged** — battery adds one broadcast receiver and
+  two tiny functions to the same single adapter file; sampling, drain
+  math and the guard are all Dart.
+
+| Stage | Scope | State |
+|---|---|---|
+| 1 (M1) | Theme engine (4 skins), home screen, hero clock, memories card, app grid, page dots, dock, static Pond home | **done** |
+| 2 (M2a) | A–Z drawer + search + recents, folders (shared-axis open, inline rename), long-press menus with two-step uninstall | **done** |
+| 3 (M2b/M3) | Edit mode with honest snapping, widget picker, wallpaper & style, settings hub + gestures | **done** |
+| 4 (M4) | Pond ambient loop, mouth drawer, Calm-pond + battery guard | **done** |
+| 5 (v0.10) | Device mode, real permissions, toad family theming, auto-update, API 37 | **done** |
+| 6 (v0.11) | Launcher infrastructure: default-home verification, AppWidgetHost hosting, live index, shade + lock + share, notification dots, app shortcuts, honest fallback | **done** |
+| 7 (v0.12) | The app asks: ask-by-app permission dialogs + Permissions & access page, first-run intro, toadLIST with comments, battery drain system + low-battery calm, live sticky note, release-notes render | **done** |
+
+## What v0.11 delivered (the launcher infrastructure)
 
 - **Default Home, verified** — Settings → *Device & updates* shows the HOME
   role status, and a calm, dismissable, gesture-transparent banner offers
@@ -56,14 +102,40 @@ the completeness checklist below is now real Android integration:
   `ToadNotificationListener` (dots) are opt-in system hooks, not adapters.
   CI runs on **target/compile SDK 37**.
 
-| Stage | Scope | State |
-|---|---|---|
-| 1 (M1) | Theme engine (4 skins), home screen, hero clock, memories card, app grid, page dots, dock, static Pond home | **done** |
-| 2 (M2a) | A–Z drawer + search + recents, folders (shared-axis open, inline rename), long-press menus with two-step uninstall | **done** |
-| 3 (M2b/M3) | Edit mode with honest snapping, widget picker, wallpaper & style, settings hub + gestures | **done** |
-| 4 (M4) | Pond ambient loop, mouth drawer, Calm-pond + battery guard | **done** |
-| 5 (v0.10) | Device mode, real permissions, toad family theming, auto-update, API 37 | **done** |
-| 6 (v0.11) | Launcher infrastructure: default-home verification, AppWidgetHost hosting, live index, shade + lock + share, notification dots, app shortcuts, honest fallback | **done** |
+## Stage 7 walkthrough (the app asks)
+
+- **Ask flow, one shape everywhere** — `toad_ask.dart`: icon, Caveat
+  title, one honest paragraph (what is read, what is done, what is never
+  done), "not now" / "open the toggle". Five factories, five deep-links:
+  Notification listener settings, the pre-selected accessibility entry,
+  Usage access, the system HOME-role dialog, and the per-app install
+  toggle. "Not now" never nags twice — the feature keeps degrading
+  honestly.
+- **Switches that ask** — *Notification dots* / *Badges* on → access
+  checked, dialog if missing. *Double-tap to sleep* on → lock service
+  checked, dialog if missing. *Usage-based recents* on → the dialog
+  replaces the old silent settings jump. Failing at use-time (double-tap
+  with the service off) asks too — no more toast-and-vanish.
+- **Permissions & access** — Settings hub row; five live statuses written
+  in plain words, a re-check pill, and the promise rows: install asked
+  only at handoff; INTERNET *never* asked, never granted.
+- **The intro** — `introSeen` in settings (persisted), the gate swaps the
+  home for the carousel until the last page; *set up access* hands
+  straight to the Permissions page. Replayed from About.
+- **toadLIST** — `todo_store.dart` holds the model + persistence (one
+  SharedPreferences JSON, offline-first); the screen is the sketchbook
+  paper: add pill, hand-drawn checkboxes, note counters, filters, the
+  confirm-before-release dialog, and time-ago stamps. The drawer's pinned
+  row shows the open count at a glance; the sticky widget renders the top
+  three open flies (with note counts) live.
+- **Battery** — `battery_monitor.dart`: samples (at, level, charging)
+  persisted locally (240 cap), drain = Σdrop / Σspan across unplugged
+  spans in a trailing window (needs ≥ 12 min of evidence — no lies from
+  thin data), estimate = level ÷ rate (capped at 99 h). Demo mode seeds a
+  simulated battery and **says so** in the drain page header. The hero
+  pill renders `battery 76% · −6.2%/h`; low-battery calm shares one
+  provider (`pondCalmProvider`) with Calm-pond so the pond never argues
+  with the skin scope.
 
 ## Stage 6 walkthrough (the launcher infrastructure)
 

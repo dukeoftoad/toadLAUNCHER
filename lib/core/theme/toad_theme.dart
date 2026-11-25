@@ -9,6 +9,7 @@ library;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../device/battery_monitor.dart' show pondCalmProvider;
 import '../settings/launcher_settings.dart';
 import 'skins.dart';
 import 'toad_tokens.dart';
@@ -144,8 +145,9 @@ class ToadThemeScope extends ConsumerWidget {
       sunsetMinute: settings.sunsetMinute,
       sunriseHour: settings.sunriseHour,
       sunriseMinute: settings.sunriseMinute,
-      // Calm pond: "night falls instantly" — the loop freezes below.
-      pondCalm: settings.calmPond,
+      // Calm pond — the manual switch OR the drain (low-battery calm):
+      // "night falls instantly" and the loop freezes below.
+      pondCalm: ref.watch(pondCalmProvider),
     );
 
     var palette = paletteFor(skin);

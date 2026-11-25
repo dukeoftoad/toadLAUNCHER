@@ -13,10 +13,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/models/models.dart';
+import '../../core/device/battery_monitor.dart' show batteryMonitorProvider;
 import '../../core/settings/launcher_settings.dart' show clockProvider;
 import '../../core/theme/toad_theme.dart';
 import '../../core/theme/toad_tokens.dart';
 import '../../features/home/widgets/hero_zone.dart' show buildHeroData;
+import '../../features/settings/battery_page.dart';
+import '../../features/todo/todo_store.dart' show todoListProvider;
 import 'android_widget_view.dart';
 
 /// Span → clock scale. 4×1 (the default hero) renders exactly 1.0 — the
@@ -56,7 +59,7 @@ class PlacedWidgetView extends ConsumerWidget {
 // Caveat clock — "the clock re-renders live at each size"
 // ---------------------------------------------------------------------------
 
-class ClockWidgetView extends StatelessWidget {
+class ClockWidgetView extends ConsumerWidget {
   const ClockWidgetView({
     super.key,
     required this.now,
@@ -69,10 +72,11 @@ class ClockWidgetView extends StatelessWidget {
   final int h;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final palette = ToadTheme.of(context).palette;
     final data = buildHeroData(now, pond: false, pondNight: false);
     final scale = clockScale(w, h);
+    final battery = ref.watch(batteryMonitorProvider);
 
     return SizedBox(
       height: widgetZoneHeight(h),
@@ -142,6 +146,42 @@ class ClockWidgetView extends StatelessWidget {
                         height: 1.5,
                       ),
                     ),
+                    // The pond battery pill — taps open the drain page.
+                    if (battery.level >= 0) ...[
+                      const SizedBox(height: 3),
+                      GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () =>
+                            Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => const BatteryPage(),
+                              ),
+                            ),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: palette.accentWash,
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: palette.hairline.withValues(
+                                alpha: palette.hairline.a * 0.8,
+                              ),
+                            ),
+                          ),
+                          child: Text(
+                            battery.heroLine,
+                            style: ToadType.inter(
+                              ToadMetrics.heroSideSize - 0.5,
+                              color: palette.accentInk,
+                              height: 1.3,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -360,17 +400,36 @@ class CalendarWidgetView extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Sticky note — Patrick Hand scribble
+// Sticky note — a live toadLIST view (Patrick Hand on paper). The old
+// static "buy milk…" scribble is gone: the note now shows the real open
+// flies with their notes count, and nothing when the list is empty.
 // ---------------------------------------------------------------------------
 
-class StickyWidgetView extends StatelessWidget {
+class StickyWidgetView extends ConsumerWidget {
   const StickyWidgetView({super.key, required this.h});
 
   final int h;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final palette = ToadTheme.of(context).palette;
+    final tasks = ref.watch(todoListProvider);
+    final open = tasks.where((t) => !t.done).toList();
+
+    final String body;
+    if (open.isEmpty) {
+      body = tasks.isEmpty
+          ? 'toadLIST\n\nnothing to catch —\nadd flies in the drawer'
+          : 'toadLIST\n\nevery fly is caught ✓';
+    } else {
+      final lines = open.take(3).map((t) {
+        final prefix = t.comments.isEmpty ? '' : ' (${t.comments.length})';
+        return '· ${_clip(t.title, 16)}$prefix';
+      }).join('\n');
+      body = open.length <= 3
+          ? lines
+          : '$lines\n…and ${open.length - 3} more';
+    }
 
     return SizedBox(
       height: widgetZoneHeight(h),
@@ -396,7 +455,7 @@ class StickyWidgetView extends StatelessWidget {
               child: Align(
                 alignment: Alignment.topLeft,
                 child: Text(
-                  'buy milk…\ncall amma\nfeed the toad',
+                  body,
                   style: ToadType.hand(
                     15,
                     height: 1.35,
@@ -419,4 +478,7 @@ class StickyWidgetView extends StatelessWidget {
       ),
     );
   }
+
+  static String _clip(String s, [int max = 16]) =>
+      s.length <= max ? s : '${s.substring(0, max)}…';
 }

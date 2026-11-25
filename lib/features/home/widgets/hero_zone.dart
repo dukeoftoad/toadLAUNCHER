@@ -108,9 +108,21 @@ HeroClockData buildHeroData(
 }
 
 class HeroZone extends StatelessWidget {
-  const HeroZone({super.key, required this.data});
+  const HeroZone({
+    super.key,
+    required this.data,
+    this.batteryLine,
+    this.onBatteryTap,
+  });
 
   final HeroClockData data;
+
+  /// The pond battery pill — one honest line from the drain monitor
+  /// ("battery 76% · −6.2%/h"). Null renders nothing (unknown/hidden).
+  final String? batteryLine;
+
+  /// Tapping the pill opens Settings → Battery (the drain page).
+  final VoidCallback? onBatteryTap;
 
   @override
   Widget build(BuildContext context) {
@@ -167,6 +179,37 @@ class HeroZone extends StatelessWidget {
                     height: 1.5,
                   ),
                 ),
+                if (batteryLine != null) ...[
+                  const SizedBox(height: 2),
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: onBatteryTap,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: palette.accentWash,
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(
+                          color: palette.hairline.withValues(
+                            alpha: palette.hairline.a * 0.8,
+                          ),
+                        ),
+                      ),
+                      child: Text(
+                        batteryLine!,
+                        textAlign: TextAlign.right,
+                        style: ToadType.inter(
+                          ToadMetrics.heroSideSize - 0.5,
+                          color: palette.accentInk,
+                          height: 1.3,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
